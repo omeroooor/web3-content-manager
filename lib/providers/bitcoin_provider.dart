@@ -14,25 +14,30 @@ class BitcoinProvider extends ChangeNotifier {
 
   Map<String, dynamic>? getProfile(String contentHash) => _profiles[contentHash];
 
+  void clearProfiles() {
+    _profiles.clear();
+    _error = null;
+    notifyListeners();
+  }
+
   Future<void> fetchProfile(String contentHash) async {
-    print('\nFetching profile in provider for hash: $contentHash');
+    print('\nFetching profile for hash: $contentHash');
     _isLoading = true;
     _error = null;
+    _profiles.remove(contentHash); // Clear existing profile data
     notifyListeners();
 
     try {
       final profile = await _bitcoinService.getProfile(contentHash);
-      print('Profile received in provider: $profile');
       _profiles[contentHash] = profile;
       _error = null;
     } catch (e) {
-      print('Error in provider: $e');
+      print('Error fetching profile: $e');
       _error = e.toString();
-      _profiles.remove(contentHash); // Clear invalid profile
+      _profiles.remove(contentHash); // Ensure profile is cleared on error
     } finally {
       _isLoading = false;
       notifyListeners();
-      print('Profile data updated, current profiles: $_profiles');
     }
   }
 }

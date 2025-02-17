@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:io';
+import 'dart:async';
 import 'package:http/http.dart' as http;
 
 class BitcoinRPCClient {
@@ -38,25 +40,47 @@ class BitcoinRPCClient {
           'Authorization': 'Basic $_auth',
         },
         body: json.encode(requestBody),
+      ).timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          throw TimeoutException('Connection timed out. Please check your node settings.');
+        },
       );
 
       print('\nBitcoin RPC Response:');
       print('Status code: ${response.statusCode}');
       print('Response body: ${response.body}');
 
-      if (response.statusCode != 200) {
-        throw Exception('RPC call failed: ${response.statusCode} ${response.body}');
+      if (response.statusCode == 401) {
+        throw Exception('Authentication failed. Please check your username and password.');
       }
 
-      final result = json.decode(response.body) as Map<String, dynamic>;
+      if (response.statusCode != 200) {
+        throw Exception('RPC call failed with status ${response.statusCode}: ${response.body}');
+      }
+
+      // Try to parse the response body
+      Map<String, dynamic> result;
+      try {
+        result = json.decode(response.body) as Map<String, dynamic>;
+      } catch (e) {
+        throw Exception('Invalid response format from node: ${response.body}');
+      }
       
       if (result.containsKey('error') && result['error'] != null) {
         print('RPC error: ${result['error']}');
         throw Exception('RPC error: ${result['error']}');
       }
 
+      if (!result.containsKey('result')) {
+        throw Exception('Invalid response format: missing result field');
+      }
+
       print('RPC result: ${result['result']}');
       return result['result'] as Map<String, dynamic>;
+    } on SocketException catch (e) {
+      print('Socket error: $e');
+      throw Exception('Failed to connect to node. Please check your host and port settings.');
     } catch (e) {
       print('RPC exception: $e');
       rethrow;

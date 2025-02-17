@@ -1,7 +1,7 @@
 import 'bitcoin_rpc_client.dart';
 
 class BitcoinService {
-  late BitcoinRPCClient _client;
+  BitcoinRPCClient? _client;
   bool _isInitialized = false;
 
   Future<void> initialize({
@@ -10,8 +10,6 @@ class BitcoinService {
     required String username,
     required String password,
   }) async {
-    if (_isInitialized) return;
-
     print('\nInitializing Bitcoin Service:');
     print('Host: $host');
     print('Port: $port');
@@ -28,15 +26,30 @@ class BitcoinService {
     print('Bitcoin Service initialized');
   }
 
+  Future<void> reinitialize({
+    required String host,
+    required int port,
+    required String username,
+    required String password,
+  }) async {
+    _isInitialized = false;
+    await initialize(
+      host: host,
+      port: port,
+      username: username,
+      password: password,
+    );
+  }
+
   Future<Map<String, dynamic>> getProfile(String contentHash) async {
-    if (!_isInitialized) {
+    if (!_isInitialized || _client == null) {
       throw Exception('BitcoinService not initialized');
     }
 
     print('\nFetching profile for content hash: $contentHash');
     
     try {
-      final response = await _client.command('getprofile', [contentHash]);
+      final response = await _client!.command('getprofile', [contentHash]);
       
       final profile = {
         'rps': response['rps'] as int? ?? 0,

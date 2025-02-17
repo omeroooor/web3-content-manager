@@ -30,15 +30,16 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  provider: ^6.0.5
-  path_provider: ^2.0.15
-  uuid: ^3.0.7
-  crypto: ^3.0.3
-  archive: ^3.3.7
+  provider: ^6.0.0
+  path_provider: ^2.0.0
+  uuid: ^3.0.0
+  crypto: ^3.0.0
+  archive: ^3.0.0
+  pointycastle: ^3.7.3
+  http: ^1.1.0
+  shared_preferences: ^2.2.0  # Added for persisting settings
   file_picker: ^5.3.3
   json_annotation: ^4.8.1
-  pointycastle: ^3.7.3
-  http: ^1.1.0  # Added for HTTP requests
 
 dev_dependencies:
   flutter_test:
