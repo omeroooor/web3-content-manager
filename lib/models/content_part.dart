@@ -32,7 +32,7 @@ class PortableContent {
   final String standardName;
   final String standardVersion;
   final Map<String, dynamic> standardData;
-  final String contentHash;
+  String contentHash;
   final List<ContentPart> parts;
   final DateTime createdAt;
   final DateTime updatedAt;

@@ -1,216 +1,238 @@
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart';
 import '../models/content_part.dart';
 import '../services/content_service.dart';
-import '../standards/w3_gamified_nft.dart';
-import '../standards/content_standard.dart';
 
 class ContentProvider with ChangeNotifier {
-  final ContentService _service = ContentService();
-  final Map<String, ContentStandard> _standards = {
-    'W3-Gamified-NFT': W3GamifiedNFTStandard(),
-  };
-
+  final ContentService _service;
+  List<PortableContent> _contents = [];
   PortableContent? _currentContent;
   List<File>? _currentFiles;
   bool _isLoading = false;
   String? _error;
 
+  ContentProvider(this._service) {
+    initialize();
+  }
+
+  Future<void> initialize() async {
+    print('\nInitializing ContentProvider...');
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      await _service.initialize();
+      _contents = _service.getAllContents();
+      print('Loaded ${_contents.length} contents');
+      notifyListeners();
+    } catch (e) {
+      print('Error initializing ContentProvider: $e');
+      _error = 'Failed to load contents: $e';
+      notifyListeners();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> refresh() async {
+    print('\nRefreshing contents...');
+    await initialize();
+  }
+
+  List<PortableContent> get contents => _contents;
   PortableContent? get currentContent => _currentContent;
   List<File>? get currentFiles => _currentFiles;
   bool get isLoading => _isLoading;
   String? get error => _error;
 
-  void _setLoading(bool loading) {
-    _isLoading = loading;
-    notifyListeners();
+  void selectContent(String id) {
+    print('\nSelecting content: $id');
+    final contentData = _service.getContent(id);
+    if (contentData != null) {
+      _currentContent = contentData.$1;
+      _currentFiles = contentData.$2;
+      print('Selected content: ${_currentContent!.name}');
+      print('Number of files: ${_currentFiles!.length}');
+      notifyListeners();
+    } else {
+      print('Content not found: $id');
+    }
   }
 
-  void _setError(String? error) {
-    _error = error;
+  Future<void> createContent() async {
+    _error = null;
+    _isLoading = true;
     notifyListeners();
-  }
 
-  Future<void> createNewContent({
-    required String name,
-    required String description,
-    required String standardName,
-    required Map<String, dynamic> standardData,
-  }) async {
     try {
-      _setLoading(true);
-      _setError(null);
-
-      // Get the standard
-      final standard = _standards[standardName];
-      if (standard == null) {
-        throw Exception('Unknown standard: $standardName');
-      }
-
-      // Pick files
+      // Show file picker for image
       final result = await FilePicker.platform.pickFiles(
-        allowMultiple: true,
-        withData: true,
+        type: FileType.image,
+        allowMultiple: false,
       );
 
       if (result == null || result.files.isEmpty) {
-        _setError('No files selected');
-        return;
+        throw Exception('No image selected');
       }
 
-      final files = result.files
-          .map((file) => File(file.path!))
-          .toList();
-
-      // For W3-Gamified-NFT, we need to compute the image checksum
-      if (standardName == 'W3-Gamified-NFT') {
-        final imageFile = files.firstWhere(
-          (file) => file.path.toLowerCase().endsWith('.png') || 
-                    file.path.toLowerCase().endsWith('.jpg') ||
-                    file.path.toLowerCase().endsWith('.jpeg'),
-          orElse: () => throw Exception('Please include an image file'),
-        );
-
-        final imageBytes = await imageFile.readAsBytes();
-        final imageChecksum = await _service.computeHash(imageBytes);
-        standardData['imageChecksum'] = imageChecksum;
-      }
-
-      // Create content with standard
-      _currentContent = await _service.createContent(
-        name: name,
-        description: description,
-        standardName: standardName,
-        standardVersion: standard.version,
-        standardData: standardData,
+      final file = File(result.files.first.path!);
+      final files = [file];
+      
+      // Create new content with the selected image
+      final content = await _service.createContent(
+        name: 'New Content',
+        description: 'Description',
+        standardName: 'W3-Gamified-NFT',
+        standardVersion: '1.0.0',
+        standardData: {
+          'code': 'CODE123',
+          'owner': '1234567890abcdef',
+          'nonce': 1,
+          'image': file.path,
+        },
         files: files,
       );
-      
+
+      _currentContent = content;
       _currentFiles = files;
+      _contents = _service.getAllContents();
       notifyListeners();
     } catch (e) {
-      _setError('Failed to create content: $e');
+      _error = 'Failed to create content: $e';
+      notifyListeners();
     } finally {
-      _setLoading(false);
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> importContent() async {
+    _error = null;
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      // Show file picker for .pcontent file
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pcontent'],
+        allowMultiple: false,
+      );
+
+      if (result == null || result.files.isEmpty) {
+        throw Exception('No file selected');
+      }
+
+      final file = File(result.files.first.path!);
+      final importResult = await _service.importContent(file);
+      _currentContent = importResult.$1;
+      _currentFiles = importResult.$2;
+      _contents = _service.getAllContents();
+      notifyListeners();
+    } catch (e) {
+      _error = 'Failed to import content: $e';
+      notifyListeners();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
   Future<void> exportContent() async {
     if (_currentContent == null || _currentFiles == null) {
-      _setError('No content to export');
+      _error = 'No content to export';
+      notifyListeners();
       return;
     }
 
-    try {
-      _setLoading(true);
-      _setError(null);
+    _error = null;
+    _isLoading = true;
+    notifyListeners();
 
-      // Create temporary export file
-      final exportedFile = await _service.exportContent(_currentContent!, _currentFiles!);
-      
-      // Show save file dialog
-      String? outputPath = await FilePicker.platform.saveFile(
-        dialogTitle: 'Save Portable Content',
+    try {
+      // Export to temporary file first
+      final tempFile = await _service.exportContent(_currentContent!, _currentFiles!);
+
+      // Show file picker for save location
+      final result = await FilePicker.platform.saveFile(
+        dialogTitle: 'Export Content',
         fileName: '${_currentContent!.name}.pcontent',
-        allowedExtensions: ['pcontent'],
-        type: FileType.custom,
       );
 
-      if (outputPath == null) {
-        _setError('Export cancelled');
-        return;
+      if (result == null) {
+        throw Exception('No save location selected');
       }
 
-      // Ensure the file has .pcontent extension
-      if (!outputPath.toLowerCase().endsWith('.pcontent')) {
-        outputPath = '$outputPath.pcontent';
-      }
-
-      // Copy the temporary file to the selected location
-      await exportedFile.copy(outputPath);
-      
-      // Delete the temporary file
-      await exportedFile.delete();
-
+      // Copy to selected location
+      await tempFile.copy(result);
+      // Clean up temp file
+      await tempFile.delete();
     } catch (e) {
-      _setError('Failed to export content: $e');
-    } finally {
-      _setLoading(false);
-    }
-  }
-
-  Future<void> importContent() async {
-    try {
-      _setLoading(true);
-      _setError(null);
-
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pcontent'],
-        withData: true,
-      );
-
-      if (result == null || result.files.isEmpty) {
-        _setError('No file selected');
-        return;
-      }
-
-      final file = File(result.files.first.path!);
-      final (content, files) = await _service.importContent(file);
-      
-      // Validate against standard
-      final standard = _standards[content.standardName];
-      if (standard == null) {
-        throw Exception('Unknown standard: ${content.standardName}');
-      }
-
-      await standard.validateData(content.standardData, files);
-      
-      _currentContent = content;
-      _currentFiles = files;
+      _error = 'Failed to export content: $e';
       notifyListeners();
-    } catch (e) {
-      _setError('Failed to import content: $e');
     } finally {
-      _setLoading(false);
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
   Future<bool> verifyContent() async {
+    print('\nStarting content verification...');
     if (_currentContent == null || _currentFiles == null) {
-      _setError('No content to verify');
+      print('No content to verify');
+      _error = 'No content to verify';
+      notifyListeners();
       return false;
     }
 
+    _error = null;
+    _isLoading = true;
+    notifyListeners();
+
     try {
-      _setLoading(true);
-      _setError(null);
-
-      // Get the standard
-      final standard = _standards[_currentContent!.standardName];
-      if (standard == null) {
-        throw Exception('Unknown standard: ${_currentContent!.standardName}');
-      }
-
-      // Verify content against standard
-      await standard.validateData(_currentContent!.standardData, _currentFiles!);
-
-      // Verify file hashes
+      print('Verifying content: ${_currentContent!.name} (${_currentContent!.id})');
+      print('Number of files: ${_currentFiles!.length}');
       final isValid = await _service.verifyContent(_currentContent!, _currentFiles!);
+      if (!isValid) {
+        print('Content verification failed');
+        _error = 'Content verification failed';
+        notifyListeners();
+      } else {
+        print('Content verification successful');
+      }
       return isValid;
     } catch (e) {
-      _setError('Failed to verify content: $e');
+      print('Error during verification: $e');
+      _error = 'Content verification failed: $e';
+      notifyListeners();
       return false;
     } finally {
-      _setLoading(false);
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
-  void clearContent() {
-    _currentContent = null;
-    _currentFiles = null;
+  Future<void> deleteContent(String id) async {
     _error = null;
+    _isLoading = true;
     notifyListeners();
+
+    try {
+      await _service.deleteContent(id);
+      if (_currentContent?.id == id) {
+        _currentContent = null;
+        _currentFiles = null;
+      }
+      _contents = _service.getAllContents();
+      notifyListeners();
+    } catch (e) {
+      _error = 'Failed to delete content: $e';
+      notifyListeners();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 }

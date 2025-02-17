@@ -69,16 +69,25 @@ class W3GamifiedNFTStandard implements ContentStandard {
     }
 
     // Find image file
-    final imagePart = files.firstWhere(
-      (file) => file.path.toLowerCase().endsWith('.png') || 
-                file.path.toLowerCase().endsWith('.jpg') ||
-                file.path.toLowerCase().endsWith('.jpeg'),
-      orElse: () => throw Exception('Image file is required'),
-    );
+    if (files.isEmpty) {
+      throw Exception('Image file is required');
+    }
+
+    // Use the first file as the image file since we only have one file in this standard
+    final imagePart = files.first;
+    print('Validating image file: ${imagePart.path}');
+
+    // Verify file exists
+    if (!await imagePart.exists()) {
+      throw Exception('Image file does not exist: ${imagePart.path}');
+    }
 
     // Compute image checksum using only SHA-256
     final imageBytes = await imagePart.readAsBytes();
+    print('Image file size: ${imageBytes.length} bytes');
     final computedChecksum = sha256.convert(imageBytes).toString();
+    print('Computed checksum: $computedChecksum');
+    print('Expected checksum: ${standardData['imageChecksum']}');
     
     if (computedChecksum != standardData['imageChecksum']) {
       errors.add('Image checksum does not match');
