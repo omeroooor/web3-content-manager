@@ -1,43 +1,58 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/content_provider.dart';
-import 'providers/collection_provider.dart';
+import 'providers/bitcoin_provider.dart';
 import 'services/content_service.dart';
-import 'services/collection_service.dart';
+import 'services/bitcoin_service.dart';
 import 'screens/home_screen.dart';
 
-void main() {
-  runApp(const MainApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  final contentService = ContentService();
+  await contentService.initialize();
+
+  final bitcoinService = BitcoinService();
+  await bitcoinService.initialize(
+    host: 'localhost',
+    port: 19332,
+    username: 'user',
+    password: 'pass',
+  );
+
+  runApp(MyApp(
+    contentService: contentService,
+    bitcoinService: bitcoinService,
+  ));
 }
 
-class MainApp extends StatelessWidget {
-  const MainApp({super.key});
+class MyApp extends StatelessWidget {
+  final ContentService contentService;
+  final BitcoinService bitcoinService;
+
+  const MyApp({
+    super.key,
+    required this.contentService,
+    required this.bitcoinService,
+  });
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        Provider(
-          create: (_) => ContentService(),
-        ),
-        Provider(
-          create: (_) => CollectionService(),
+        Provider(create: (_) => contentService),
+        Provider(create: (_) => bitcoinService),
+        ChangeNotifierProvider(
+          create: (context) => ContentProvider(contentService),
         ),
         ChangeNotifierProvider(
-          create: (context) => ContentProvider(
-            context.read<ContentService>(),
-          ),
-        ),
-        ChangeNotifierProvider(
-          create: (context) => CollectionProvider(
-            context.read<CollectionService>(),
-          ),
+          create: (context) => BitcoinProvider(bitcoinService),
         ),
       ],
       child: MaterialApp(
         title: 'Portable Content Manager',
         theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+          primarySwatch: Colors.blue,
           useMaterial3: true,
         ),
         home: const HomeScreen(),

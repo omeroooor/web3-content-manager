@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/content_provider.dart';
+import '../providers/bitcoin_provider.dart';
 import '../models/content_part.dart';
 
 class ContentListScreen extends StatelessWidget {
@@ -18,129 +19,142 @@ class ContentListScreen extends StatelessWidget {
     );
   }
 
-  Future<Widget> _buildImagePreview(File file) async {
-    try {
-      final bytes = await file.readAsBytes();
-      return Image.memory(
-        bytes,
-        fit: BoxFit.contain,
-        errorBuilder: (context, error, stackTrace) {
-          print('Image preview error: $error');
-          return const Icon(Icons.broken_image, size: 100);
-        },
-      );
-    } catch (e) {
-      print('Error reading image file: $e');
-      return const Icon(Icons.broken_image, size: 100);
-    }
-  }
-
-  void _showFilePreview(BuildContext context, File file, String name) async {
-    print('Opening preview for: ${file.path}');
-    
-    Widget previewWidget;
-    if (_isImageFile(name)) {
-      previewWidget = await _buildImagePreview(file);
-    } else {
-      previewWidget = const Icon(Icons.file_present, size: 100);
-    }
-
-    if (context.mounted) {
-      showDialog(
-        context: context,
-        builder: (context) => Dialog(
-          child: Container(
-            constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.8,
-              maxHeight: MediaQuery.of(context).size.height * 0.8,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AppBar(
-                  title: Text(name),
-                  leading: IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ),
-                Flexible(
-                  child: SingleChildScrollView(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: previewWidget,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-  }
-
-  bool _isImageFile(String path) {
-    final ext = path.toLowerCase();
-    return ext.contains('.png') || 
-           ext.contains('.jpg') || 
-           ext.contains('.jpeg') || 
-           ext.contains('.gif') || 
-           ext.contains('.webp');
-  }
-
-  Widget _buildFilePreview(BuildContext context, File file, String name) {
-    print('Building preview for: ${file.path}');
-    return Card(
-      child: InkWell(
-        onTap: () => _showFilePreview(context, file, name),
-        child: Padding(
-          padding: const EdgeInsets.all(8.0),
+  void _showContentDetails(BuildContext context, PortableContent content) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Container(
+          padding: const EdgeInsets.all(16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (_isImageFile(name))
-                FutureBuilder<Uint8List>(
-                  future: file.readAsBytes(),
-                  builder: (context, snapshot) {
-                    if (snapshot.hasError) {
-                      print('Thumbnail error: ${snapshot.error}');
-                      return const Icon(Icons.broken_image, size: 50);
-                    }
-                    if (!snapshot.hasData) {
-                      return const SizedBox(
-                        height: 100,
-                        width: 100,
-                        child: Center(child: CircularProgressIndicator()),
-                      );
-                    }
-                    return SizedBox(
-                      height: 100,
-                      width: 100,
-                      child: Image.memory(
-                        snapshot.data!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          print('Thumbnail error: $error');
-                          return const Icon(Icons.broken_image, size: 50);
-                        },
-                      ),
-                    );
-                  },
-                )
-              else
-                const Icon(Icons.file_present, size: 50),
-              const SizedBox(height: 8),
               Text(
-                name,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
+                content.name,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
+              const SizedBox(height: 8),
+              Text('Description: ${content.description}'),
+              const SizedBox(height: 8),
+              Text('Standard: ${content.standardName} v${content.standardVersion}'),
+              const SizedBox(height: 8),
+              Text('Content Hash: ${content.contentHash}'),
+              const SizedBox(height: 16),
+              const Text('Files:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              ...content.parts.map((part) => Text(
+                    '${part.name} (${part.size} bytes)',
+                  )),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  void _deleteContent(BuildContext context, String contentId) {
+    final contentProvider = context.read<ContentProvider>();
+    contentProvider.deleteContent(contentId);
+    _showMessage(context, 'Content deleted');
+  }
+
+  void _showProfileDialog(BuildContext context, String contentHash) {
+    print('\nShowing profile dialog for hash: $contentHash');
+    final bitcoinProvider = context.read<BitcoinProvider>();
+    
+    // Immediately fetch the profile data
+    bitcoinProvider.fetchProfile(contentHash);
+
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          child: Consumer<BitcoinProvider>(
+            builder: (context, provider, child) {
+              print('Rebuilding profile dialog, loading: ${provider.isLoading}, error: ${provider.error}');
+              final profile = provider.getProfile(contentHash);
+              print('Current profile data: $profile');
+
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Content Profile',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  if (provider.isLoading)
+                    const Center(child: CircularProgressIndicator())
+                  else if (provider.error != null)
+                    Text(
+                      'Error: ${provider.error}',
+                      style: const TextStyle(color: Colors.red),
+                    )
+                  else if (profile != null) ...[
+                    Text('RPS: ${profile['rps']}'),
+                    const SizedBox(height: 8),
+                    Text('Owner: ${profile['owner']}'),
+                    const SizedBox(height: 8),
+                    Text(
+                      profile['isRented']
+                          ? 'Currently rented by: ${profile['tenant']}'
+                          : 'Not currently rented',
+                    ),
+                  ] else
+                    const Text('No profile data available'),
+                  const SizedBox(height: 16),
+                  Center(
+                    child: ElevatedButton(
+                      onPressed: () => provider.fetchProfile(contentHash),
+                      child: const Text('Refresh Profile'),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContentActions(BuildContext context, String contentId, PortableContent content) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.info_outline),
+          onPressed: () => _showContentDetails(context, content),
+          tooltip: 'View Details',
+        ),
+        IconButton(
+          icon: const Icon(Icons.account_box_outlined),
+          onPressed: () => _showProfileDialog(context, content.contentHash),
+          tooltip: 'View Profile',
+        ),
+        IconButton(
+          icon: const Icon(Icons.delete_outline),
+          onPressed: () => _deleteContent(context, contentId),
+          tooltip: 'Delete',
+        ),
+      ],
     );
   }
 
@@ -162,7 +176,10 @@ class ContentListScreen extends StatelessWidget {
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
                 const SizedBox(height: 16),
-                _buildActionButtons(context, contentProvider),
+                ElevatedButton(
+                  onPressed: () => contentProvider.refresh(),
+                  child: const Text('Retry'),
+                ),
               ],
             ),
           );
@@ -180,7 +197,54 @@ class ContentListScreen extends StatelessWidget {
           ),
           body: Column(
             children: [
-              _buildActionButtons(context, contentProvider),
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Wrap(
+                  spacing: 8.0,
+                  runSpacing: 8.0,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: () => contentProvider.createContent(),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Create Content'),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: () => contentProvider.importContent(),
+                      icon: const Icon(Icons.file_upload),
+                      label: const Text('Import Content'),
+                    ),
+                    if (contentProvider.currentContent != null) ...[
+                      ElevatedButton.icon(
+                        onPressed: () => contentProvider.exportContent(),
+                        icon: const Icon(Icons.file_download),
+                        label: const Text('Export Content'),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          try {
+                            final isValid = await contentProvider.verifyContent();
+                            if (context.mounted) {
+                              _showMessage(
+                                context,
+                                isValid 
+                                  ? 'Content verification successful!' 
+                                  : 'Content verification failed',
+                                isError: !isValid,
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              _showMessage(context, 'Verification error: $e', isError: true);
+                            }
+                          }
+                        },
+                        icon: const Icon(Icons.verified),
+                        label: const Text('Verify Content'),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
               const Divider(),
               Expanded(
                 child: contentProvider.contents.isEmpty
@@ -199,17 +263,12 @@ class ContentListScreen extends StatelessWidget {
                             selected: isSelected,
                             leading: Icon(
                               Icons.description,
-                              color: isSelected
-                                  ? Theme.of(context).colorScheme.primary
-                                  : null,
+                              color: isSelected ? Theme.of(context).colorScheme.primary : null,
                             ),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.delete),
-                              onPressed: () => contentProvider.deleteContent(content.id),
-                            ),
+                            trailing: _buildContentActions(context, content.id, content),
                             onTap: () {
                               contentProvider.selectContent(content.id);
-                              _showContentDetails(context, contentProvider);
+                              _showContentDetails(context, content);
                             },
                           );
                         },
@@ -219,158 +278,6 @@ class ContentListScreen extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-
-  void _showContentDetails(BuildContext context, ContentProvider contentProvider) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.5,
-        minChildSize: 0.3,
-        maxChildSize: 0.8,
-        expand: false,
-        builder: (context, scrollController) => _buildContentDetails(
-          context,
-          contentProvider,
-          scrollController,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildContentDetails(
-    BuildContext context,
-    ContentProvider contentProvider,
-    ScrollController scrollController,
-  ) {
-    final content = contentProvider.currentContent!;
-    final files = contentProvider.currentFiles!;
-    
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).scaffoldBackgroundColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            height: 4,
-            width: 40,
-            margin: const EdgeInsets.symmetric(vertical: 8),
-            decoration: BoxDecoration(
-              color: Theme.of(context).dividerColor,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          Expanded(
-            child: ListView(
-              controller: scrollController,
-              padding: const EdgeInsets.all(16.0),
-              children: [
-                Text(
-                  'Content Details',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 8),
-                Text('Name: ${content.name}'),
-                Text('Description: ${content.description}'),
-                Text('Standard: ${content.standardName} v${content.standardVersion}'),
-                Text('Created: ${content.createdAt}'),
-                Text('Updated: ${content.updatedAt}'),
-                Text('Content Hash: ${content.contentHash}'),
-                const SizedBox(height: 16),
-                Text(
-                  'Files:',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 180,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: content.parts.length,
-                    itemBuilder: (context, index) {
-                      final part = content.parts[index];
-                      final file = files[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildFilePreview(context, file, part.name),
-                            Text(
-                              '${(part.size / 1024).toStringAsFixed(1)} KB',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                            Text(
-                              'Hash: ${part.hash.substring(0, 8)}...',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionButtons(BuildContext context, ContentProvider contentProvider) {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Wrap(
-        spacing: 8.0,
-        runSpacing: 8.0,
-        children: [
-          ElevatedButton.icon(
-            onPressed: () => contentProvider.createContent(),
-            icon: const Icon(Icons.add),
-            label: const Text('Create Content'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () => contentProvider.importContent(),
-            icon: const Icon(Icons.file_upload),
-            label: const Text('Import Content'),
-          ),
-          if (contentProvider.currentContent != null) ...[
-            ElevatedButton.icon(
-              onPressed: () => contentProvider.exportContent(),
-              icon: const Icon(Icons.file_download),
-              label: const Text('Export Content'),
-            ),
-            ElevatedButton.icon(
-              onPressed: () async {
-                try {
-                  final isValid = await contentProvider.verifyContent();
-                  if (context.mounted) {
-                    _showMessage(
-                      context,
-                      isValid 
-                        ? 'Content verification successful!' 
-                        : 'Content verification failed',
-                      isError: !isValid,
-                    );
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    _showMessage(context, 'Verification error: $e', isError: true);
-                  }
-                }
-              },
-              icon: const Icon(Icons.verified),
-              label: const Text('Verify Content'),
-            ),
-          ],
-        ],
-      ),
     );
   }
 }
