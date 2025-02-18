@@ -228,38 +228,82 @@ class ContentService {
   }
 
   Future<File> exportContent(PortableContent content, List<File> files) async {
+    print('\nStarting content export in service...');
+    print('Content: ${content.name} (${content.id})');
+    print('Number of files: ${files.length}');
+    
+    // Create a zip archive
     final archive = Archive();
     
     // Add metadata
-    final metadataBytes = utf8.encode(json.encode(content.toJson()));
+    print('Adding metadata to archive...');
+    final metadataJson = json.encode(content.toJson());
+    print('Metadata JSON: $metadataJson');
+    final metadataBytes = utf8.encode(metadataJson);
     archive.addFile(ArchiveFile(
       'metadata.json',
       metadataBytes.length,
       metadataBytes,
     ));
+    print('Metadata added to archive');
 
     // Add files
+    print('\nAdding files to archive...');
     for (var i = 0; i < content.parts.length; i++) {
       final part = content.parts[i];
       final file = files[i];
+      print('\nProcessing file ${i + 1}/${files.length}:');
+      print('Part ID: ${part.id}');
+      print('File path: ${file.path}');
+      print('File exists: ${await file.exists()}');
+      
       final bytes = await file.readAsBytes();
+      print('File size: ${bytes.length} bytes');
+      
+      // Verify file hash matches the part hash
+      final computedHash = await computeHash(bytes);
+      if (computedHash != part.hash) {
+        throw Exception('Hash mismatch for file ${part.name}');
+      }
       
       archive.addFile(ArchiveFile(
         'files/${part.id}',
         bytes.length,
         bytes,
       ));
+      print('File added to archive');
     }
 
+    // Get the standard
+    final standard = _standards[content.standardName];
+    if (standard == null) {
+      throw Exception('Unknown standard: ${content.standardName}');
+    }
+
+    // Validate standard data
+    await standard.validateData(content.standardData, files);
+
     // Create zip
+    print('\nCreating zip archive...');
     final zipEncoder = ZipEncoder();
     final zipData = zipEncoder.encode(archive);
-    if (zipData == null) throw Exception('Failed to create zip archive');
+    if (zipData == null) {
+      print('Failed to create zip archive: encoder returned null');
+      throw Exception('Failed to create zip archive');
+    }
+    print('Zip archive created, size: ${zipData.length} bytes');
 
     // Save to temporary file
+    print('\nSaving to temporary file...');
     final tempDir = await getTemporaryDirectory();
+    print('Temporary directory: ${tempDir.path}');
     final outputFile = File('${tempDir.path}/${content.name}.pcontent');
+    print('Output file path: ${outputFile.path}');
+    
     await outputFile.writeAsBytes(zipData);
+    print('File written successfully');
+    print('Output file exists: ${await outputFile.exists()}');
+    print('Output file size: ${await outputFile.length()} bytes');
 
     return outputFile;
   }

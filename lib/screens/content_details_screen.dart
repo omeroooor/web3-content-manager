@@ -157,10 +157,56 @@ class ContentDetailsScreen extends StatelessWidget {
                   ListTile(
                     leading: const Icon(Icons.file_download),
                     title: const Text('Export Content'),
-                    onTap: () {
+                    onTap: () async {
                       final contentProvider = context.read<ContentProvider>();
                       contentProvider.selectContent(content.id);
-                      contentProvider.exportContent();
+                      
+                      // Show loading indicator
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Row(
+                            children: [
+                              SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              SizedBox(width: 16),
+                              Text('Preparing content for export...'),
+                            ],
+                          ),
+                          duration: Duration(seconds: 30), // Long duration as default
+                          behavior: SnackBarBehavior.floating,
+                          margin: EdgeInsets.all(8),
+                        ),
+                      );
+
+                      try {
+                        await contentProvider.exportContent();
+                        // Hide the loading indicator
+                        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                        
+                        if (context.mounted && contentProvider.error == null) {
+                          _showMessage(
+                            context,
+                            'Content exported successfully to Downloads folder!',
+                          );
+                        }
+                      } catch (e) {
+                        // Hide the loading indicator
+                        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                        
+                        if (context.mounted) {
+                          _showMessage(
+                            context,
+                            'Export error: ${e.toString().replaceAll('Exception: ', '')}',
+                            isError: true,
+                          );
+                        }
+                      }
                     },
                   ),
                   ListTile(

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/content_part.dart';
 import '../services/content_service.dart';
 
@@ -138,33 +139,53 @@ class ContentProvider with ChangeNotifier {
   }
 
   Future<void> exportContent() async {
+    print('\nStarting content export...');
     if (_currentContent == null || _currentFiles == null) {
+      print('No content to export: currentContent=${_currentContent != null}, currentFiles=${_currentFiles != null}');
       _setError('No content to export');
       return;
     }
+
+    print('Exporting content: ${_currentContent!.name} (${_currentContent!.id})');
+    print('Number of files: ${_currentFiles!.length}');
 
     _error = null;
     _setLoading(true);
 
     try {
+      print('Creating temporary export file...');
       // Export to temporary file first
       final tempFile = await _service.exportContent(_currentContent!, _currentFiles!);
+      print('Temporary file created at: ${tempFile.path}');
+      print('Temporary file exists: ${await tempFile.exists()}');
+      print('Temporary file size: ${await tempFile.length()} bytes');
 
-      // Show file picker for save location
-      final result = await FilePicker.platform.saveFile(
-        dialogTitle: 'Export Content',
-        fileName: '${_currentContent!.name}.pcontent',
-      );
-
-      if (result == null) {
-        throw Exception('No save location selected');
+      // Get the downloads directory
+      final downloadsDir = await getExternalStorageDirectory();
+      if (downloadsDir == null) {
+        throw Exception('Could not access downloads directory');
       }
+      
+      print('Downloads directory: ${downloadsDir.path}');
+      final fileName = '${_currentContent!.name}.pcontent';
+      final targetPath = '${downloadsDir.path}/$fileName';
+      print('Target path: $targetPath');
 
-      // Copy to selected location
-      await tempFile.copy(result);
-      // Clean up temp file
+      // Copy the file to downloads
+      print('Copying file to downloads...');
+      final targetFile = await tempFile.copy(targetPath);
+      print('File copied successfully to: ${targetFile.path}');
+      
+      // Clean up the temp file
+      print('Cleaning up temporary file...');
       await tempFile.delete();
-    } catch (e) {
+      print('Temporary file deleted');
+      
+      print('Export completed successfully');
+      notifyListeners();
+    } catch (e, stackTrace) {
+      print('Export error: $e');
+      print('Stack trace: $stackTrace');
       _setError('Failed to export content: $e');
     } finally {
       _setLoading(false);
