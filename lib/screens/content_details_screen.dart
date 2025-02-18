@@ -11,6 +11,18 @@ class ContentDetailsScreen extends StatelessWidget {
     required this.content,
   });
 
+  void _showMessage(BuildContext context, String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red : Colors.green,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(8),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -84,7 +96,62 @@ class ContentDetailsScreen extends StatelessWidget {
                     title: const Text('Verify Content'),
                     onTap: () async {
                       final contentProvider = context.read<ContentProvider>();
-                      await contentProvider.verifyContent();
+                      contentProvider.selectContent(content.id);
+                      
+                      // Show loading indicator
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Row(
+                            children: [
+                              SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              SizedBox(width: 16),
+                              Text('Verifying content...'),
+                            ],
+                          ),
+                          duration: Duration(seconds: 30), // Long duration as default
+                          behavior: SnackBarBehavior.floating,
+                          margin: EdgeInsets.all(8),
+                        ),
+                      );
+
+                      try {
+                        final isValid = await contentProvider.verifyContent();
+                        // Hide the loading indicator
+                        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                        
+                        if (context.mounted) {
+                          if (isValid) {
+                            _showMessage(
+                              context,
+                              'Content verification successful! All files are valid.',
+                            );
+                          } else {
+                            _showMessage(
+                              context,
+                              'Content verification failed. Files may be corrupted or missing.',
+                              isError: true,
+                            );
+                          }
+                        }
+                      } catch (e) {
+                        // Hide the loading indicator
+                        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                        
+                        if (context.mounted) {
+                          _showMessage(
+                            context,
+                            'Verification error: $e',
+                            isError: true,
+                          );
+                        }
+                      }
                     },
                   ),
                   ListTile(
@@ -92,6 +159,7 @@ class ContentDetailsScreen extends StatelessWidget {
                     title: const Text('Export Content'),
                     onTap: () {
                       final contentProvider = context.read<ContentProvider>();
+                      contentProvider.selectContent(content.id);
                       contentProvider.exportContent();
                     },
                   ),
