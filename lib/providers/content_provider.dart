@@ -18,8 +18,7 @@ class ContentProvider with ChangeNotifier {
 
   Future<void> initialize() async {
     print('\nInitializing ContentProvider...');
-    _isLoading = true;
-    notifyListeners();
+    _setLoading(true);
 
     try {
       await _service.initialize();
@@ -28,11 +27,9 @@ class ContentProvider with ChangeNotifier {
       notifyListeners();
     } catch (e) {
       print('Error initializing ContentProvider: $e');
-      _error = 'Failed to load contents: $e';
-      notifyListeners();
+      _setError('Failed to load contents: $e');
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      _setLoading(false);
     }
   }
 
@@ -63,8 +60,7 @@ class ContentProvider with ChangeNotifier {
 
   Future<void> createContent() async {
     _error = null;
-    _isLoading = true;
-    notifyListeners();
+    _setLoading(true);
 
     try {
       // Show file picker for image
@@ -101,18 +97,15 @@ class ContentProvider with ChangeNotifier {
       _contents = _service.getAllContents();
       notifyListeners();
     } catch (e) {
-      _error = 'Failed to create content: $e';
-      notifyListeners();
+      _setError('Failed to create content: $e');
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      _setLoading(false);
     }
   }
 
   Future<void> importContent() async {
     _error = null;
-    _isLoading = true;
-    notifyListeners();
+    _setLoading(true);
 
     try {
       // Show file picker for .pcontent file
@@ -138,24 +131,20 @@ class ContentProvider with ChangeNotifier {
       _contents = _service.getAllContents();
       notifyListeners();
     } catch (e) {
-      _error = 'Failed to import content: $e';
-      notifyListeners();
+      _setError('Failed to import content: $e');
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      _setLoading(false);
     }
   }
 
   Future<void> exportContent() async {
     if (_currentContent == null || _currentFiles == null) {
-      _error = 'No content to export';
-      notifyListeners();
+      _setError('No content to export');
       return;
     }
 
     _error = null;
-    _isLoading = true;
-    notifyListeners();
+    _setLoading(true);
 
     try {
       // Export to temporary file first
@@ -176,11 +165,9 @@ class ContentProvider with ChangeNotifier {
       // Clean up temp file
       await tempFile.delete();
     } catch (e) {
-      _error = 'Failed to export content: $e';
-      notifyListeners();
+      _setError('Failed to export content: $e');
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      _setLoading(false);
     }
   }
 
@@ -188,14 +175,12 @@ class ContentProvider with ChangeNotifier {
     print('\nStarting content verification...');
     if (_currentContent == null || _currentFiles == null) {
       print('No content to verify');
-      _error = 'No content to verify';
-      notifyListeners();
+      _setError('No content to verify');
       return false;
     }
 
     _error = null;
-    _isLoading = true;
-    notifyListeners();
+    _setLoading(true);
 
     try {
       print('Verifying content: ${_currentContent!.name} (${_currentContent!.id})');
@@ -203,27 +188,23 @@ class ContentProvider with ChangeNotifier {
       final isValid = await _service.verifyContent(_currentContent!, _currentFiles!);
       if (!isValid) {
         print('Content verification failed');
-        _error = 'Content verification failed';
-        notifyListeners();
+        _setError('Content verification failed');
       } else {
         print('Content verification successful');
       }
       return isValid;
     } catch (e) {
       print('Error during verification: $e');
-      _error = 'Content verification failed: $e';
-      notifyListeners();
+      _setError('Content verification failed: $e');
       return false;
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      _setLoading(false);
     }
   }
 
   Future<void> deleteContent(String id) async {
     _error = null;
-    _isLoading = true;
-    notifyListeners();
+    _setLoading(true);
 
     try {
       await _service.deleteContent(id);
@@ -234,11 +215,25 @@ class ContentProvider with ChangeNotifier {
       _contents = _service.getAllContents();
       notifyListeners();
     } catch (e) {
-      _error = 'Failed to delete content: $e';
-      notifyListeners();
+      _setError('Failed to delete content: $e');
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      _setLoading(false);
     }
+  }
+
+  void clearError() {
+    _error = null;
+    notifyListeners();
+  }
+
+  void _setError(String error) {
+    _error = error;
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  void _setLoading(bool loading) {
+    _isLoading = loading;
+    notifyListeners();
   }
 }
