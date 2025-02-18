@@ -40,6 +40,7 @@ dependencies:
   shared_preferences: ^2.2.0  # Added for persisting settings
   file_picker: ^5.3.3
   json_annotation: ^4.8.1
+  share_plus: ^7.2.1  # Added for sharing functionality
 
 dev_dependencies:
   flutter_test:

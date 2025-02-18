@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -10,6 +11,7 @@ import 'package:pointycastle/digests/ripemd160.dart';
 import '../models/content_part.dart';
 import '../standards/content_standard.dart';
 import '../standards/w3_gamified_nft.dart';
+import 'package:path/path.dart' as p;
 
 class ContentService {
   final _uuid = const Uuid();
@@ -227,85 +229,198 @@ class ContentService {
     );
   }
 
-  Future<File> exportContent(PortableContent content, List<File> files) async {
-    print('\nStarting content export in service...');
-    print('Content: ${content.name} (${content.id})');
-    print('Number of files: ${files.length}');
-    
-    // Create a zip archive
-    final archive = Archive();
-    
-    // Add metadata
-    print('Adding metadata to archive...');
-    final metadataJson = json.encode(content.toJson());
-    print('Metadata JSON: $metadataJson');
-    final metadataBytes = utf8.encode(metadataJson);
-    archive.addFile(ArchiveFile(
-      'metadata.json',
-      metadataBytes.length,
-      metadataBytes,
-    ));
-    print('Metadata added to archive');
+  Future<void> exportContent(PortableContent content, File targetFile) async {
+    try {
+      print('\n=== Starting Content Export ===');
+      
+      // First verify the content files
+      print('\nVerifying content files before export...');
+      if (!await _verifyContentFiles(content)) {
+        throw Exception('Content verification failed - some files are missing or corrupted');
+      }
+      print('Content verification successful');
 
-    // Add files
-    print('\nAdding files to archive...');
-    for (var i = 0; i < content.parts.length; i++) {
-      final part = content.parts[i];
-      final file = files[i];
-      print('\nProcessing file ${i + 1}/${files.length}:');
-      print('Part ID: ${part.id}');
-      print('File path: ${file.path}');
-      print('File exists: ${await file.exists()}');
+      print('\nCreating archive...');
+      final archive = Archive();
+
+      // Track total expected size
+      int expectedSize = 0;
+
+      // Add metadata
+      final metadataJson = json.encode(content.toJson());
+      final metadataBytes = utf8.encode(metadataJson);
+      archive.addFile(ArchiveFile(
+        'metadata.json',
+        metadataBytes.length,
+        metadataBytes,
+      ));
+      print('Added metadata.json to archive (${metadataBytes.length} bytes)');
+      expectedSize += metadataBytes.length;
+
+      // Get the content directory
+      final storageDir = await _getStorageDir();
+      final contentDir = Directory('$storageDir/files/${content.id}');
       
-      final bytes = await file.readAsBytes();
-      print('File size: ${bytes.length} bytes');
+      print('\nProcessing content parts:');
+      for (final part in content.parts) {
+        print('\nProcessing part: ${part.name} (${part.id})');
+        final partFile = File('${contentDir.path}/${part.id}');
+        print('Reading file: ${partFile.path}');
+        
+        final bytes = await partFile.readAsBytes();
+        print('Read ${bytes.length} bytes');
+        expectedSize += bytes.length;
+        
+        final computedHash = await computeHash(bytes);
+        print('Computed hash: $computedHash');
+        print('Expected hash: ${part.hash}');
+        
+        if (computedHash != part.hash) {
+          throw Exception('Hash mismatch for file ${part.name}');
+        }
+
+        // Store file with part ID as name
+        final archivePath = 'files/${part.id}';
+        final archiveFile = ArchiveFile(
+          archivePath,
+          bytes.length,
+          bytes,
+        );
+        archive.addFile(archiveFile);
+        print('Added to archive as: $archivePath (${bytes.length} bytes)');
+      }
+
+      print('\nFinal archive contents:');
+      int actualSize = 0;
+      for (final file in archive.files) {
+        print('- ${file.name} (${file.size} bytes)');
+        print('  isFile: ${file.isFile}');
+        if (file.content != null) {
+          final contentSize = (file.content as List<int>).length;
+          print('  Content size: $contentSize bytes');
+          actualSize += contentSize;
+        } else {
+          print('  Content: null');
+          throw Exception('File ${file.name} has null content');
+        }
+      }
+
+      if (actualSize != expectedSize) {
+        print('\nERROR: Size mismatch');
+        print('Expected total size: $expectedSize bytes');
+        print('Actual total size: $actualSize bytes');
+        throw Exception('Archive size mismatch - some content may be missing');
+      }
+      print('\nSize verification successful');
+
+      print('\nEncoding archive...');
+      final encodedArchive = ZipEncoder().encode(archive);
+      if (encodedArchive == null) {
+        throw Exception('Failed to encode archive');
+      }
+
+      print('Writing archive to: ${targetFile.path}');
+      await targetFile.writeAsBytes(encodedArchive);
+      final finalSize = await targetFile.length();
+      print('Archive written successfully ($finalSize bytes)');
       
-      // Verify file hash matches the part hash
-      final computedHash = await computeHash(bytes);
-      if (computedHash != part.hash) {
-        throw Exception('Hash mismatch for file ${part.name}');
+      // Verify the written file
+      print('\nVerifying written archive...');
+      final verificationBytes = await targetFile.readAsBytes();
+      final verificationArchive = ZipDecoder().decodeBytes(verificationBytes);
+      if (verificationArchive == null) {
+        throw Exception('Failed to decode written archive');
       }
       
-      archive.addFile(ArchiveFile(
-        'files/${part.id}',
-        bytes.length,
-        bytes,
-      ));
-      print('File added to archive');
+      print('Verifying archive contents:');
+      for (final file in verificationArchive.files) {
+        print('- ${file.name} (${file.size} bytes)');
+        if (file.content == null) {
+          throw Exception('File ${file.name} has null content in written archive');
+        }
+      }
+      print('Archive verification successful');
+      
+      print('=== Export Complete ===\n');
+    } catch (e) {
+      print('ERROR in exportContent: $e');
+      rethrow;
     }
+  }
 
-    // Get the standard
-    final standard = _standards[content.standardName];
-    if (standard == null) {
-      throw Exception('Unknown standard: ${content.standardName}');
-    }
+  Future<bool> _verifyContentFiles(PortableContent content) async {
+    print('\n=== Verifying Content Files ===');
+    print('Content ID: ${content.id}');
+    print('Content Name: ${content.name}');
+    print('Number of parts: ${content.parts.length}');
 
-    // Validate standard data
-    await standard.validateData(content.standardData, files);
-
-    // Create zip
-    print('\nCreating zip archive...');
-    final zipEncoder = ZipEncoder();
-    final zipData = zipEncoder.encode(archive);
-    if (zipData == null) {
-      print('Failed to create zip archive: encoder returned null');
-      throw Exception('Failed to create zip archive');
-    }
-    print('Zip archive created, size: ${zipData.length} bytes');
-
-    // Save to temporary file
-    print('\nSaving to temporary file...');
-    final tempDir = await getTemporaryDirectory();
-    print('Temporary directory: ${tempDir.path}');
-    final outputFile = File('${tempDir.path}/${content.name}.pcontent');
-    print('Output file path: ${outputFile.path}');
+    final storageDir = await _getStorageDir();
+    final contentDir = Directory('$storageDir/files/${content.id}');
     
-    await outputFile.writeAsBytes(zipData);
-    print('File written successfully');
-    print('Output file exists: ${await outputFile.exists()}');
-    print('Output file size: ${await outputFile.length()} bytes');
+    print('\nStorage paths:');
+    print('Storage directory: $storageDir');
+    print('Content directory: ${contentDir.path}');
+    print('Content directory exists: ${await contentDir.exists()}');
 
-    return outputFile;
+    if (!await contentDir.exists()) {
+      print('ERROR: Content directory not found');
+      return false;
+    }
+
+    print('\nContent directory structure:');
+    await _printDirectoryStructure(contentDir);
+
+    print('\nVerifying each content part:');
+    for (final part in content.parts) {
+      print('\nChecking part: ${part.name}');
+      print('Part ID: ${part.id}');
+      print('Expected hash: ${part.hash}');
+      
+      final partFile = File('${contentDir.path}/${part.id}');
+      print('File path: ${partFile.path}');
+      print('File exists: ${await partFile.exists()}');
+      
+      if (!await partFile.exists()) {
+        print('ERROR: File not found');
+        return false;
+      }
+
+      final fileSize = await partFile.length();
+      print('File size: $fileSize bytes');
+      
+      if (fileSize == 0) {
+        print('ERROR: File is empty');
+        return false;
+      }
+
+      final bytes = await partFile.readAsBytes();
+      final computedHash = await computeHash(bytes);
+      print('Computed hash: $computedHash');
+      
+      if (computedHash != part.hash) {
+        print('ERROR: Hash mismatch');
+        return false;
+      }
+      
+      print('Part verification: SUCCESS');
+    }
+
+    print('\n=== Content Verification Complete ===');
+    return true;
+  }
+
+  Future<void> _printDirectoryStructure(Directory dir, [String indent = '']) async {
+    await for (final entity in dir.list()) {
+      if (entity is File) {
+        final size = await entity.length();
+        final hash = await computeHash(await entity.readAsBytes());
+        print('$indent- ${p.basename(entity.path)} (File, $size bytes)');
+        print('$indent  Hash: $hash');
+      } else if (entity is Directory) {
+        print('$indent+ ${p.basename(entity.path)} (Directory)');
+        await _printDirectoryStructure(entity, '$indent  ');
+      }
+    }
   }
 
   Future<(PortableContent, List<File>)> importContent(File pcontentFile) async {
@@ -315,56 +430,124 @@ class ContentService {
   }
 
   Future<(PortableContent, List<File>)> _importContent(File pcontentFile) async {
-    final bytes = await pcontentFile.readAsBytes();
-    final archive = ZipDecoder().decodeBytes(bytes);
+    try {
+      print('\n=== Starting Content Import ===');
+      print('Import file path: ${pcontentFile.path}');
+      print('File exists: ${await pcontentFile.exists()}');
+      print('File size: ${await pcontentFile.length()} bytes');
 
-    // Read metadata
-    final metadataFile = archive.findFile('metadata.json');
-    if (metadataFile == null) throw Exception('Invalid pcontent file: metadata.json not found');
-    
-    final metadataJson = utf8.decode(metadataFile.content as List<int>);
-    final content = PortableContent.fromJson(json.decode(metadataJson));
+      final bytes = await pcontentFile.readAsBytes();
+      print('Read ${bytes.length} bytes from file');
 
-    // Extract files
-    final tempDir = await getTemporaryDirectory();
-    final files = <File>[];
-
-    for (final part in content.parts) {
-      final archiveFile = archive.findFile('files/${part.id}');
-      if (archiveFile == null) throw Exception('Invalid pcontent file: missing file ${part.id}');
-
-      final file = File('${tempDir.path}/${part.name}');
-      await file.writeAsBytes(archiveFile.content as List<int>);
-      files.add(file);
-
-      // Verify file hash
-      final computedHash = await computeHash(archiveFile.content as List<int>);
-      if (computedHash != part.hash) {
-        throw Exception('Hash mismatch for file ${part.name}');
+      print('\nDecoding archive...');
+      final archive = ZipDecoder().decodeBytes(bytes);
+      if (archive == null) {
+        print('ERROR: Failed to decode archive');
+        throw Exception('Failed to decode archive');
+      }
+      print('Archive decoded successfully');
+      
+      print('\nArchive details:');
+      print('Number of files: ${archive.files.length}');
+      print('Archive files:');
+      for (final file in archive.files) {
+        print('\nFile: ${file.name}');
+        print('  Size: ${file.size} bytes');
+        print('  isFile: ${file.isFile}');
+        if (file.content != null) {
+          print('  Content size: ${(file.content as List<int>).length} bytes');
+        } else {
+          print('  Content: null');
+        }
       }
 
-      // Update standardData with new file checksum if it's an image
-      if (part.name.toLowerCase().endsWith('.png') || 
-          part.name.toLowerCase().endsWith('.jpg') || 
-          part.name.toLowerCase().endsWith('.jpeg')) {
-        content.standardData['imageChecksum'] = computedHash;
+      // Read metadata
+      print('\nLooking for metadata.json...');
+      final metadataFile = archive.findFile('metadata.json');
+      if (metadataFile == null) {
+        print('ERROR: metadata.json not found in archive');
+        throw Exception('Invalid pcontent file: metadata.json not found');
       }
+      
+      print('Decoding metadata...');
+      final metadataJson = utf8.decode(metadataFile.content as List<int>);
+      print('Metadata content: $metadataJson');
+      
+      final content = PortableContent.fromJson(json.decode(metadataJson));
+      print('Content decoded: ${content.name} (${content.id})');
+      print('Number of parts: ${content.parts.length}');
+
+      // Extract files
+      final tempDir = await getTemporaryDirectory();
+      final files = <File>[];
+
+      print('\nProcessing content parts:');
+      for (final part in content.parts) {
+        print('\nProcessing part: ${part.name} (${part.id})');
+        
+        final archivePath = 'files/${part.id}';
+        print('Looking for file at path: $archivePath');
+        
+        final archiveFile = archive.findFile(archivePath);
+        if (archiveFile == null) {
+          print('ERROR: File not found at path: $archivePath');
+          print('\nDumping all archive paths:');
+          for (final file in archive.files) {
+            print('- ${file.name}');
+            // Try to read the file content to verify it's accessible
+            if (file.content != null) {
+              print('  Content size: ${(file.content as List<int>).length} bytes');
+            } else {
+              print('  Content: null');
+            }
+          }
+          throw Exception('Invalid pcontent file: missing file ${part.id}');
+        }
+
+        print('Found file in archive (${archiveFile.size} bytes)');
+        final tempFile = File(p.join(tempDir.path, part.name));
+        print('Writing to temporary file: ${tempFile.path}');
+        
+        final fileBytes = archiveFile.content as List<int>;
+        print('Content size: ${fileBytes.length} bytes');
+        await tempFile.writeAsBytes(fileBytes);
+        files.add(tempFile);
+        print('File written successfully');
+
+        final computedHash = await computeHash(fileBytes);
+        print('Computed hash: $computedHash');
+        print('Expected hash: ${part.hash}');
+        
+        if (computedHash != part.hash) {
+          print('ERROR: Hash mismatch');
+          print('  Computed: $computedHash');
+          print('  Expected: ${part.hash}');
+          throw Exception('Hash mismatch for file ${part.name}');
+        }
+        print('Hash verified successfully');
+      }
+
+      print('\nValidating standard...');
+      final standard = _standards[content.standardName];
+      if (standard == null) {
+        print('ERROR: Standard not found: ${content.standardName}');
+        throw Exception('Unknown standard: ${content.standardName}');
+      }
+
+      print('Validating standard data...');
+      await standard.validateData(content.standardData, files);
+
+      print('Computing content hash...');
+      final newContentHash = await standard.computeHash(content.standardData, content.parts);
+      content.contentHash = newContentHash;
+      print('New content hash: $newContentHash');
+
+      print('\n=== Import Complete ===');
+      return (content, files);
+    } catch (e) {
+      print('ERROR in _importContent: $e');
+      rethrow;
     }
-
-    // Get the standard
-    final standard = _standards[content.standardName];
-    if (standard == null) {
-      throw Exception('Unknown standard: ${content.standardName}');
-    }
-
-    // Validate standard data
-    await standard.validateData(content.standardData, files);
-
-    // Update content hash after updating standardData
-    final newContentHash = await standard.computeHash(content.standardData, content.parts);
-    content.contentHash = newContentHash;
-
-    return (content, files);
   }
 
   Future<bool> verifyContent(PortableContent content, List<File> files) async {

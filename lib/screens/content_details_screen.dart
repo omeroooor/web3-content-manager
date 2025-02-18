@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import '../models/content_part.dart';
 import '../providers/content_provider.dart';
 import 'package:provider/provider.dart';
+import 'dart:io';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:cross_file/cross_file.dart';
+import 'package:archive/archive.dart';
 
 class ContentDetailsScreen extends StatelessWidget {
   final PortableContent content;
@@ -23,6 +29,138 @@ class ContentDetailsScreen extends StatelessWidget {
     );
   }
 
+  Future<String> _createShareText(PortableContent content) async {
+    return '''
+Content Details:
+Name: ${content.name}
+Description: ${content.description}
+ID: ${content.id}
+Standard: ${content.standardName} v${content.standardVersion}
+Created: ${content.createdAt}
+
+Note: The content file is attached to this share.
+''';
+  }
+
+  Future<void> _shareContent(BuildContext context) async {
+    try {
+      print('\nStarting content share...');
+      print('Platform: ${Platform.operatingSystem}');
+      
+      print('Content details:');
+      print('- Name: ${content.name}');
+      print('- ID: ${content.id}');
+      print('- Description: ${content.description}');
+      print('- Standard: ${content.standardName} v${content.standardVersion}');
+      print('- Created: ${content.createdAt}');
+
+      // Show loading indicator
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Preparing content for sharing...')),
+        );
+      }
+
+      // Get the share directory
+      final tempDir = await getTemporaryDirectory();
+      final shareDir = Directory('${tempDir.path}/share_content');
+      if (!await shareDir.exists()) {
+        await shareDir.create(recursive: true);
+      }
+      print('\nShare directory: ${shareDir.path}');
+
+      // Create export file
+      final fileName = '${content.name}_${content.id.substring(0, 8)}.pcontent';
+      final exportFile = File('${shareDir.path}/$fileName');
+      print('Creating export file at: ${exportFile.path}');
+
+      // Export content
+      final provider = Provider.of<ContentProvider>(context, listen: false);
+      await provider.exportContent(returnFile: true, targetFile: exportFile);
+      
+      // Verify the export file
+      print('\nVerifying export file before share:');
+      print('File exists: ${await exportFile.exists()}');
+      final fileSize = await exportFile.length();
+      print('File size: $fileSize bytes');
+      
+      // Verify archive contents
+      print('Verifying archive contents:');
+      final bytes = await exportFile.readAsBytes();
+      final archive = ZipDecoder().decodeBytes(bytes);
+      if (archive == null) {
+        throw Exception('Failed to decode exported archive');
+      }
+      
+      print('Archive files:');
+      for (final file in archive.files) {
+        print('- ${file.name} (${file.size} bytes)');
+        if (file.content == null) {
+          throw Exception('File ${file.name} has null content');
+        }
+        print('  Content size: ${(file.content as List<int>).length} bytes');
+      }
+      print('Archive verification successful');
+
+      // Create share text
+      final shareText = await _createShareText(content);
+      print('Share text created successfully');
+      print('Share text length: ${shareText.length}');
+
+      print('Attempting to share...');
+      await Share.shareXFiles(
+        [XFile(exportFile.path)],
+        text: shareText,
+      );
+
+      // Verify file after sharing
+      print('\nVerifying file after share:');
+      if (!await exportFile.exists()) {
+        print('ERROR: File no longer exists after share!');
+        throw Exception('File was deleted during share');
+      }
+      
+      final postShareSize = await exportFile.length();
+      print('Post-share file size: $postShareSize bytes');
+      if (postShareSize != fileSize) {
+        print('ERROR: File size changed during share!');
+        print('Original size: $fileSize bytes');
+        print('New size: $postShareSize bytes');
+        throw Exception('File was modified during share');
+      }
+      
+      // Verify archive contents again
+      print('Verifying post-share archive contents:');
+      final postShareBytes = await exportFile.readAsBytes();
+      final postShareArchive = ZipDecoder().decodeBytes(postShareBytes);
+      if (postShareArchive == null) {
+        throw Exception('Failed to decode post-share archive');
+      }
+      
+      print('Post-share archive files:');
+      for (final file in postShareArchive.files) {
+        print('- ${file.name} (${file.size} bytes)');
+        if (file.content == null) {
+          throw Exception('File ${file.name} has null content after share');
+        }
+        print('  Content size: ${(file.content as List<int>).length} bytes');
+      }
+      print('Post-share archive verification successful');
+
+      // Hide loading indicator
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      }
+    } catch (e) {
+      print('ERROR in _shareContent: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error sharing content: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -31,9 +169,7 @@ class ContentDetailsScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.share),
-            onPressed: () {
-              // TODO: Implement sharing
-            },
+            onPressed: () => _shareContent(context),
             tooltip: 'Share',
           ),
         ],
@@ -277,8 +413,8 @@ class _InfoRow extends StatelessWidget {
             child: Text(
               label,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
           Expanded(
