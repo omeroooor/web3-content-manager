@@ -71,6 +71,7 @@ class ContentProvider with ChangeNotifier {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.image,
         allowMultiple: false,
+        withData: true, // Ensure we get the file data on all platforms
       );
 
       if (result == null || result.files.isEmpty) {
@@ -116,8 +117,8 @@ class ContentProvider with ChangeNotifier {
     try {
       // Show file picker for .pcontent file
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pcontent'],
+        type: FileType.any, // Use any type to avoid extension filtering issues
+        withData: true, // Ensure we get the file data on all platforms
         allowMultiple: false,
       );
 
@@ -125,7 +126,12 @@ class ContentProvider with ChangeNotifier {
         throw Exception('No file selected');
       }
 
-      final file = File(result.files.first.path!);
+      final filePath = result.files.first.path!;
+      if (!filePath.toLowerCase().endsWith('.pcontent')) {
+        throw Exception('Please select a .pcontent file');
+      }
+
+      final file = File(filePath);
       final importResult = await _service.importContent(file);
       _currentContent = importResult.$1;
       _currentFiles = importResult.$2;
