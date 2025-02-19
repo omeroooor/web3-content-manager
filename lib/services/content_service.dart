@@ -11,12 +11,14 @@ import 'package:pointycastle/digests/ripemd160.dart';
 import '../models/content_part.dart';
 import '../standards/content_standard.dart';
 import '../standards/w3_gamified_nft.dart';
+import '../standards/w3_simple_post_nft.dart';
 import 'package:path/path.dart' as p;
 
 class ContentService {
   final _uuid = const Uuid();
   final Map<String, ContentStandard> _standards = {
     'W3-Gamified-NFT': W3GamifiedNFTStandard(),
+    'W3-S-POST-NFT': W3SimplePostNFTStandard(),
   };
   
   Map<String, (PortableContent, List<File>)> _contents = {};

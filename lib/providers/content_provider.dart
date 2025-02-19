@@ -5,7 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../models/content_part.dart';
 import '../services/content_service.dart';
-import '../widgets/content_form_dialog.dart';
+import '../widgets/standard_content_form_dialog.dart';
 
 class ContentProvider with ChangeNotifier {
   final ContentService _service;
@@ -119,68 +119,48 @@ class ContentProvider with ChangeNotifier {
   }
 
   Future<void> createContent(BuildContext context) async {
-    print('\nCreating new content...');
-    _error = null;
-    _setLoading(true);
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => const StandardContentFormDialog(),
+    );
 
-    try {
-      // Show form dialog to get content details
-      final formResult = await showDialog<Map<String, dynamic>>(
-        context: context,
-        builder: (context) => const ContentFormDialog(),
-      );
+    if (result != null) {
+      try {
+        _isLoading = true;
+        notifyListeners();
 
-      if (formResult == null) {
-        print('Content creation cancelled by user');
-        return;
+        final standardName = result['standard'] as String;
+        final files = <File>[];
+
+        // Handle standard-specific files
+        if (standardName == 'W3-S-POST-NFT' && result.containsKey('mediaFile')) {
+          files.add(File(result['mediaFile']));
+        }
+
+        final standardData = Map<String, dynamic>.from(result)
+          ..remove('standard')
+          ..remove('mediaFile');
+
+        // Create the content
+        final content = await _service.createContent(
+          name: standardData['name'],
+          description: standardData['description'],
+          standardName: standardName,
+          standardVersion: '1.0.0',
+          standardData: standardData,
+          files: files,
+        );
+
+        _contents.add(content);
+        notifyListeners();
+      } catch (e) {
+        _error = e.toString();
+        notifyListeners();
+        rethrow;
+      } finally {
+        _isLoading = false;
+        notifyListeners();
       }
-
-      // Show file picker for image
-      print('Opening file picker for image selection...');
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-        allowMultiple: false,
-        withData: true, // Ensure we get the file data on all platforms
-      );
-
-      if (result == null || result.files.isEmpty) {
-        throw Exception('No image selected');
-      }
-
-      final file = File(result.files.first.path!);
-      final files = [file];
-      
-      print('Selected image file: ${file.path}');
-      print('File size: ${await file.length()} bytes');
-
-      // Create new content with the selected image and form data
-      final content = await _service.createContent(
-        name: formResult['name'],
-        description: formResult['description'],
-        standardName: 'W3-Gamified-NFT',
-        standardVersion: '1.0.0',
-        standardData: {
-          'code': formResult['code'],
-          'owner': formResult['owner'],
-          'nonce': formResult['nonce'],
-          'image': file.path,
-          // Note: checksum is intentionally not set here for new content
-        },
-        files: files,
-      );
-
-      print('Content created successfully');
-      _currentContent = content;
-      _currentFiles = files;
-      _contents = _service.getAllContents();
-      notifyListeners();
-    } catch (e) {
-      print('Error creating content: $e');
-      _setError('Failed to create content: $e');
-      notifyListeners();
-      rethrow;
-    } finally {
-      _setLoading(false);
     }
   }
 
