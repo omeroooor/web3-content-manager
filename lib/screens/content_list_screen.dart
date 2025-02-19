@@ -70,6 +70,7 @@ class _ContentListScreenState extends State<ContentListScreen> {
   void _showProfileDialog(BuildContext context, String contentHash) {
     print('\nShowing profile dialog for hash: $contentHash');
     final bitcoinProvider = context.read<BitcoinProvider>();
+    final contentProvider = context.read<ContentProvider>();
     
     // Immediately fetch the profile data
     bitcoinProvider.fetchProfile(contentHash);
@@ -84,6 +85,25 @@ class _ContentListScreenState extends State<ContentListScreen> {
               print('Rebuilding profile dialog, loading: ${provider.isLoading}, error: ${provider.error}');
               final profile = provider.getProfile(contentHash);
               print('Current profile data: $profile');
+
+              // Schedule profile update for after the build
+              if (profile != null) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  try {
+                    final content = contentProvider.contents.firstWhere(
+                      (content) => content.contentHash == contentHash,
+                      orElse: () => throw Exception('Content not found'),
+                    );
+                    contentProvider.updateContentProfile(
+                      content.id,
+                      profile['owner'] as String,
+                      profile['rps'] as int,
+                    );
+                  } catch (e) {
+                    print('Error updating content profile: $e');
+                  }
+                });
+              }
 
               return Column(
                 mainAxisSize: MainAxisSize.min,
@@ -143,110 +163,79 @@ class _ContentListScreenState extends State<ContentListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ContentProvider>(
-      builder: (context, contentProvider, child) {
-        Widget mainContent = Scaffold(
-          body: contentProvider.contents.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.note_add,
-                        size: 64,
-                        color: Colors.grey,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No content yet',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              color: Colors.grey,
-                            ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Use + to create or ↑ to import content',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Colors.grey,
-                            ),
-                      ),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  itemCount: contentProvider.contents.length,
-                  itemBuilder: (context, index) {
-                    final content = contentProvider.contents[index];
-                    final id = content.id;
-                    return Card(
-                      margin: const EdgeInsets.symmetric(vertical: 8),
-                      child: ListTile(
-                        leading: const Icon(Icons.description),
-                        title: Text(
-                          content.name,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Text(content.description),
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => ContentDetailsScreen(content: content),
-                            ),
-                          );
-                        },
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.info_outline),
-                              onPressed: () => _showContentDetails(context, content),
-                              tooltip: 'Details',
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.account_box_outlined),
-                              onPressed: () =>
-                                  _showProfileDialog(context, content.contentHash),
-                              tooltip: 'Profile',
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline),
-                              onPressed: () => _deleteContent(context, id),
-                              tooltip: 'Delete',
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-        );
+    return Scaffold(
+      body: Consumer<ContentProvider>(
+        builder: (context, provider, child) {
+          final contents = provider.contents;
+          
+          if (contents.isEmpty) {
+            return const Center(
+              child: Text('No contents found'),
+            );
+          }
 
-        // Show loading indicator as an overlay
-        if (contentProvider.isLoading) {
-          mainContent = Stack(
-            children: [
-              mainContent,
-              Container(
-                color: Colors.black26,
-                child: const Center(
-                  child: Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(16.0),
-                      child: CircularProgressIndicator(),
+          return ListView.builder(
+            itemCount: contents.length,
+            itemBuilder: (context, index) {
+              final content = contents[index];
+              final id = content.id;
+              return Card(
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                child: Stack(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.description),
+                      title: Text(
+                        content.name,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Text(content.description),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => ContentDetailsScreen(content: content),
+                          ),
+                        );
+                      },
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.info_outline),
+                            onPressed: () => _showContentDetails(context, content),
+                            tooltip: 'Details',
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.account_box_outlined),
+                            onPressed: () =>
+                                _showProfileDialog(context, content.contentHash),
+                            tooltip: 'Profile',
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: () => _deleteContent(context, content.id),
+                            tooltip: 'Delete',
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
+                    if (content.rps > 0)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Icon(
+                          Icons.verified,
+                          size: 16,
+                          color: Colors.blue.shade700,
+                        ),
+                      ),
+                  ],
                 ),
-              ),
-            ],
+              );
+            },
           );
-        }
-
-        return mainContent;
-      },
+        },
+      ),
     );
   }
 }

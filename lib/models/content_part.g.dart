@@ -37,6 +37,8 @@ PortableContent _$PortableContentFromJson(Map<String, dynamic> json) =>
           .toList(),
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
+      owner: json['owner'] as String? ?? "",
+      rps: (json['rps'] as num?)?.toInt() ?? 0,
     );
 
 Map<String, dynamic> _$PortableContentToJson(PortableContent instance) =>
@@ -51,4 +53,6 @@ Map<String, dynamic> _$PortableContentToJson(PortableContent instance) =>
       'parts': instance.parts,
       'createdAt': instance.createdAt.toIso8601String(),
       'updatedAt': instance.updatedAt.toIso8601String(),
+      'owner': instance.owner,
+      'rps': instance.rps,
     };

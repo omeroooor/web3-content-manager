@@ -7,6 +7,8 @@ class PortableContent {
   final String contentHash;
   final int createdAt;
   final File imageFile;
+  final String owner;
+  final int rps;
 
   PortableContent({
     required this.id,
@@ -15,6 +17,8 @@ class PortableContent {
     required this.contentHash,
     required this.createdAt,
     required this.imageFile,
+    this.owner = "",
+    this.rps = 0,
   });
 
   Map<String, dynamic> toJson() {
@@ -25,6 +29,8 @@ class PortableContent {
       'contentHash': contentHash,
       'createdAt': createdAt,
       'imagePath': imageFile.path,
+      'owner': owner,
+      'rps': rps,
     };
   }
 
@@ -36,11 +42,13 @@ class PortableContent {
       contentHash: json['contentHash'] as String,
       createdAt: json['createdAt'] as int,
       imageFile: File(json['imagePath'] as String),
+      owner: (json['owner'] as String?) ?? "",
+      rps: (json['rps'] as int?) ?? 0,
     );
   }
 
   @override
   String toString() {
-    return 'PortableContent(id: $id, name: $name, description: $description, contentHash: $contentHash, createdAt: $createdAt)';
+    return 'PortableContent(id: $id, name: $name, description: $description, contentHash: $contentHash, createdAt: $createdAt, owner: $owner, rps: $rps)';
   }
 }

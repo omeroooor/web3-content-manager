@@ -36,6 +36,8 @@ class PortableContent {
   final List<ContentPart> parts;
   final DateTime createdAt;
   final DateTime updatedAt;
+  String owner = "";
+  int rps = 0;
 
   PortableContent({
     required this.id,
@@ -48,6 +50,8 @@ class PortableContent {
     required this.parts,
     required this.createdAt,
     required this.updatedAt,
+    this.owner = "",
+    this.rps = 0,
   });
 
   factory PortableContent.fromJson(Map<String, dynamic> json) =>

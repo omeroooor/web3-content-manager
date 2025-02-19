@@ -42,51 +42,36 @@ class W3SimplePostNFTStandard implements ContentStandard {
     if (files.isNotEmpty) {
       final mediaFile = files[0];
       
-      // If we're validating existing content, use the mediaType from data
-      if (data.containsKey('mediaType')) {
-        validatedData['mediaType'] = data['mediaType'];
-        validatedData['mediaPath'] = mediaFile.path;
-        
-        // Verify checksum if provided
-        if (data.containsKey('mediaChecksum')) {
-          final bytes = await mediaFile.readAsBytes();
-          final checksum = sha256.convert(bytes).toString();
-          
-          if (checksum != data['mediaChecksum']) {
-            throw Exception('Media file checksum mismatch');
-          }
-          validatedData['mediaChecksum'] = checksum;
-        }
-      } else {
-        // This is new content, validate the file type
-        final extension = path.extension(mediaFile.path).toLowerCase();
-        
-        // Validate file type
-        if (!_isValidMediaType(extension)) {
-          throw Exception(
-            'Invalid media file type: $extension. Supported types: .jpg, .jpeg, .png, .gif, .mp4, .mov',
-          );
-        }
-
-        // Validate file size
-        final bytes = await mediaFile.readAsBytes();
-        final isVideo = _isVideoFile(extension);
-        final maxSize = isVideo ? 50 * 1024 * 1024 : 5 * 1024 * 1024; // 50MB for video, 5MB for images
-        
-        if (bytes.length > maxSize) {
-          throw Exception(
-            'Media file too large: ${mediaFile.path}. Maximum size: ${maxSize ~/ (1024 * 1024)}MB',
-          );
-        }
-
-        // Compute media checksum
-        final checksum = sha256.convert(bytes).toString();
-        print('Computed media checksum: $checksum');
-
-        validatedData['mediaPath'] = mediaFile.path;
-        validatedData['mediaType'] = _getMediaType(extension);
-        validatedData['mediaChecksum'] = checksum;
+      // Get file extension from the file path
+      final extension = path.extension(mediaFile.path).toLowerCase();
+      
+      // Validate file type
+      if (!_isValidMediaType(extension)) {
+        throw Exception(
+          'Invalid media file type: $extension. Supported types: .jpg, .jpeg, .png, .gif, .mp4, .mov',
+        );
       }
+
+      // Validate file size
+      final bytes = await mediaFile.readAsBytes();
+      final isVideo = _isVideoFile(extension);
+      final maxSize = isVideo ? 50 * 1024 * 1024 : 5 * 1024 * 1024; // 50MB for video, 5MB for images
+      
+      if (bytes.length > maxSize) {
+        throw Exception(
+          'Media file too large: ${mediaFile.path}. Maximum size: ${maxSize ~/ (1024 * 1024)}MB',
+        );
+      }
+
+      // Compute media checksum
+      final checksum = sha256.convert(bytes).toString();
+      print('Computed media checksum: $checksum');
+
+      // Use the original filename from the file path
+      final fileName = path.basename(mediaFile.path);
+      validatedData['mediaPath'] = fileName;
+      validatedData['mediaType'] = _getMediaType(extension);
+      validatedData['mediaChecksum'] = checksum;
     }
 
     print('Data validation successful');
@@ -95,18 +80,26 @@ class W3SimplePostNFTStandard implements ContentStandard {
 
   @override
   Future<String> computeHash(Map<String, dynamic> data, List<ContentPart> parts) async {
+    print('\nComputing hash with data: $data');
+    print('Parts: $parts');
+    
     final buffer = StringBuffer();
     
     // Add text content
     buffer.write(data['text']);
 
-    // Add media checksum if present
-    if (data.containsKey('mediaChecksum')) {
-      buffer.write(data['mediaChecksum']);
+    // Add media info if present
+    if (data.containsKey('mediaPath')) {
+      buffer.write(data['mediaPath']);
+      buffer.write(data['mediaType'] ?? '');
+      buffer.write(data['mediaChecksum'] ?? '');
     }
 
+    final content = buffer.toString();
+    print('Content to hash: $content');
+
     // Compute final hash
-    final contentHash = sha256.convert(utf8.encode(buffer.toString())).toString();
+    final contentHash = sha256.convert(utf8.encode(content)).toString();
     print('Computed content hash: $contentHash');
     
     return contentHash;

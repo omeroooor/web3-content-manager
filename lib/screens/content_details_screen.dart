@@ -225,6 +225,14 @@ Note: The content file is attached to this share.
                     label: 'Created',
                     value: content.createdAt.toString(),
                   ),
+                  _InfoRow(
+                    label: 'Owner',
+                    value: content.owner.isEmpty ? 'Not Set' : content.owner,
+                  ),
+                  _InfoRow(
+                    label: 'Reputation Score',
+                    value: content.rps.toString(),
+                  ),
                 ],
               ),
             ),

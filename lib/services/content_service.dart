@@ -68,9 +68,28 @@ class ContentService {
             for (final part in content.parts) {
               final file = File('${filesDir.path}/${part.id}');
               print('Checking file: ${file.path}');
+              
               if (await file.exists()) {
-                print('File exists, size: ${await file.length()} bytes');
+                final fileSize = await file.length();
+                print('File exists, size: $fileSize bytes');
+                
+                if (fileSize == 0) {
+                  print('Warning: File is empty: ${file.path}');
+                  continue;
+                }
+
+                final bytes = await file.readAsBytes();
+                final computedHash = await computeHash(bytes);
+                print('Computed hash: $computedHash');
+                print('Expected hash: ${part.hash}');
+
+                if (computedHash != part.hash) {
+                  print('Warning: Hash mismatch for file: ${file.path}');
+                  continue;
+                }
+
                 files.add(file);
+                print('File verified successfully');
               } else {
                 print('Warning: File does not exist: ${file.path}');
               }
@@ -83,7 +102,25 @@ class ContentService {
             print('Successfully loaded content with ${files.length} files');
             _contents[content.id] = (content, files);
           } else {
-            print('Warning: Not all files were found (${files.length}/${content.parts.length})');
+            print('Warning: Not all files were verified (${files.length}/${content.parts.length})');
+            
+            // Try to recover files by copying from backup if available
+            final backupDir = Directory('$storageDir/backup/${content.id}');
+            if (await backupDir.exists()) {
+              print('Found backup directory, attempting recovery...');
+              for (final part in content.parts) {
+                final backupFile = File('${backupDir.path}/${part.id}');
+                if (await backupFile.exists()) {
+                  final bytes = await backupFile.readAsBytes();
+                  if (bytes.isNotEmpty && await computeHash(bytes) == part.hash) {
+                    final targetFile = File('${filesDir.path}/${part.id}');
+                    await filesDir.create(recursive: true);
+                    await targetFile.writeAsBytes(bytes);
+                    print('Recovered file from backup: ${part.name}');
+                  }
+                }
+              }
+            }
           }
         } catch (e) {
           print('Error loading content from ${entry.path}: $e');
@@ -111,18 +148,54 @@ class ContentService {
     print('Saving files to: ${filesDir.path}');
     await filesDir.create(recursive: true);
 
+    // Create backup directory
+    final backupDir = Directory('$storageDir/backup/${content.id}');
+    print('Creating backup directory: ${backupDir.path}');
+    await backupDir.create(recursive: true);
+
     for (var i = 0; i < content.parts.length; i++) {
       final part = content.parts[i];
       final sourceFile = files[i];
       final targetFile = File('${filesDir.path}/${part.id}');
+      final backupFile = File('${backupDir.path}/${part.id}');
+      
       print('Copying file: ${sourceFile.path} -> ${targetFile.path}');
-      await sourceFile.copy(targetFile.path);
-      print('File copied, size: ${await targetFile.length()} bytes');
+      
+      // Read the source file bytes
+      final bytes = await sourceFile.readAsBytes();
+      if (bytes.isEmpty) {
+        print('ERROR: Source file is empty: ${sourceFile.path}');
+        throw Exception('Source file is empty: ${sourceFile.path}');
+      }
+      
+      // Write bytes to target file and backup
+      await targetFile.writeAsBytes(bytes);
+      await backupFile.writeAsBytes(bytes);
+      
+      // Verify the files were written correctly
+      final targetSize = await targetFile.length();
+      final backupSize = await backupFile.length();
+      print('File copied, size: $targetSize bytes, backup size: $backupSize bytes');
+      
+      if (targetSize == 0 || backupSize == 0) {
+        print('ERROR: Target or backup file is empty after copy');
+        throw Exception('Target or backup file is empty after copy');
+      }
+      
+      // Verify hashes
+      final targetHash = await computeHash(await targetFile.readAsBytes());
+      final backupHash = await computeHash(await backupFile.readAsBytes());
+      if (targetHash != part.hash || backupHash != part.hash) {
+        print('ERROR: Hash verification failed after copy');
+        throw Exception('Hash verification failed after copy');
+      }
     }
 
-    // Update in-memory cache
+    // Update in-memory cache with the new file paths
     print('Updating in-memory cache');
-    _contents[content.id] = (content, files.map((f) => File(f.path)).toList());
+    final newFiles = content.parts.map((part) => 
+      File('${filesDir.path}/${part.id}')).toList();
+    _contents[content.id] = (content, newFiles);
     print('Content saved successfully');
   }
 
@@ -190,6 +263,9 @@ class ContentService {
     required Map<String, dynamic> standardData,
     required List<File> files,
   }) async {
+    print('\nCreating content...');
+    print('Initial standardData: $standardData');
+    
     final List<ContentPart> parts = [];
     
     for (final file in files) {
@@ -198,7 +274,7 @@ class ContentService {
       
       parts.add(ContentPart(
         id: _uuid.v4(),
-        name: file.path.split(Platform.pathSeparator).last,
+        name: p.basename(file.path), // Use path.basename for consistent filename extraction
         hash: hash,
         mimeType: 'application/octet-stream', // TODO: Implement proper MIME type detection
         size: bytes.length,
@@ -211,11 +287,21 @@ class ContentService {
       throw Exception('Unknown standard: $standardName');
     }
 
-    // Validate standard data
-    await standard.validateData(standardData, files);
+    // Create a copy of standardData with correct file paths
+    final validatedData = Map<String, dynamic>.from(standardData);
+    if (standardName == 'W3-S-POST-NFT' && files.isNotEmpty) {
+      validatedData['mediaPath'] = p.basename(files.first.path);
+    }
 
-    // Compute content hash using the standard
-    final contentHash = await standard.computeHash(standardData, parts);
+    print('Pre-validation standardData: $validatedData');
+
+    // Validate standard data - this will add mediaType and mediaChecksum
+    final finalData = await standard.validateData(validatedData, files);
+    print('Post-validation standardData: $finalData');
+
+    // Compute content hash using the validated data that includes all media info
+    final contentHash = await standard.computeHash(finalData, parts);
+    print('Created content hash: $contentHash');
 
     return PortableContent(
       id: _uuid.v4(),
@@ -223,7 +309,7 @@ class ContentService {
       description: description,
       standardName: standardName,
       standardVersion: standardVersion,
-      standardData: standardData,
+      standardData: finalData, // Use the fully validated data that includes all media info
       contentHash: contentHash,
       parts: parts,
       createdAt: DateTime.now(),
@@ -567,12 +653,19 @@ class ContentService {
     }
   }
 
+  Future<void> updateContent(PortableContent content) async {
+    if (!_contents.containsKey(content.id)) return;
+    final files = _contents[content.id]!.$2;
+    await _saveContent(content, files);
+  }
+
   Future<bool> verifyContent(PortableContent content, List<File> files) async {
     print('Starting content verification...');
     print('Content ID: ${content.id}');
     print('Standard: ${content.standardName}');
     print('Number of parts: ${content.parts.length}');
     print('Number of files: ${files.length}');
+    print('Content data: ${content.standardData}');
 
     try {
       // Get the standard
@@ -583,62 +676,49 @@ class ContentService {
       }
       print('Using standard: ${content.standardName} v${content.standardVersion}');
 
-      // For W3-S-POST-NFT, we only verify files if they exist
-      final shouldVerifyFiles = content.standardName == 'W3-S-POST-NFT' 
-          ? content.standardData.containsKey('mediaPath')
-          : true;
+      // Create temporary files with original names for validation
+      final tempFiles = <File>[];
+      final tempDir = await Directory.systemTemp.createTemp('pcontent_verify_');
+      
+      try {
+        for (var i = 0; i < files.length; i++) {
+          final sourceFile = files[i];
+          final originalName = content.parts[i].name;
+          final tempFile = File('${tempDir.path}/$originalName');
+          await sourceFile.copy(tempFile.path);
+          tempFiles.add(tempFile);
+        }
 
-      if (shouldVerifyFiles) {
-        if (content.parts.length != files.length) {
-          print('Verification failed: Number of parts (${content.parts.length}) does not match number of files (${files.length})');
+        // For W3-S-POST-NFT, we need to include mediaPath in standardData if files exist
+        var standardData = Map<String, dynamic>.from(content.standardData);
+        if (content.standardName == 'W3-S-POST-NFT' && tempFiles.isNotEmpty) {
+          standardData['mediaPath'] = content.parts.first.name;
+          print('Updated standardData: $standardData');
+        }
+
+        // Validate standard data
+        print('Validating standard data...');
+        try {
+          final validatedData = await standard.validateData(standardData, tempFiles);
+          print('Standard data validation successful');
+          print('Validated data: $validatedData');
+
+          // Verify content hash using validated data
+          print('Verifying content hash...');
+          final computedContentHash = await standard.computeHash(validatedData, content.parts);
+          print('Computed content hash: $computedContentHash');
+          print('Expected content hash: ${content.contentHash}');
+          
+          final isValid = computedContentHash == content.contentHash;
+          print(isValid ? 'Content verification successful' : 'Content hash verification failed');
+          return isValid;
+        } catch (e) {
+          print('Standard data validation failed: $e');
           return false;
         }
-
-        // Verify individual files
-        for (var i = 0; i < content.parts.length; i++) {
-          final part = content.parts[i];
-          final file = files[i];
-          print('Verifying file ${i + 1}/${files.length}: ${part.name}');
-          print('File path: ${file.path}');
-          
-          if (!await file.exists()) {
-            print('Verification failed: File does not exist: ${file.path}');
-            return false;
-          }
-
-          final bytes = await file.readAsBytes();
-          print('File size: ${bytes.length} bytes');
-          final hash = await computeHash(bytes);
-          print('Computed hash: $hash');
-          print('Expected hash: ${part.hash}');
-
-          if (hash != part.hash) {
-            print('Verification failed: Hash mismatch for file ${part.name}');
-            print('Expected: ${part.hash}');
-            print('Got: $hash');
-            return false;
-          }
-        }
-      }
-
-      // Validate standard data
-      print('Validating standard data...');
-      try {
-        final validatedData = await standard.validateData(content.standardData, files);
-        print('Standard data validation successful');
-
-        // Verify content hash using validated data
-        print('Verifying content hash...');
-        final computedContentHash = await standard.computeHash(validatedData, content.parts);
-        print('Computed content hash: $computedContentHash');
-        print('Expected content hash: ${content.contentHash}');
-        
-        final isValid = computedContentHash == content.contentHash;
-        print(isValid ? 'Content verification successful' : 'Content hash verification failed');
-        return isValid;
-      } catch (e) {
-        print('Standard data validation failed: $e');
-        return false;
+      } finally {
+        // Clean up temporary files
+        await tempDir.delete(recursive: true);
       }
     } catch (e) {
       print('Verification error: $e');

@@ -73,50 +73,60 @@ class HomeScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Filter by Standard'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              RadioListTile<String?>(
-                title: const Text('All Standards'),
-                value: null,
-                groupValue: provider.selectedStandard,
-                onChanged: (value) {
-                  provider.setSelectedStandard(value);
-                  Navigator.pop(context);
-                },
-              ),
-              const Divider(),
-              ...provider.availableStandards.map(
-                (standard) => RadioListTile<String>(
-                  title: Text(standard),
-                  value: standard,
-                  groupValue: provider.selectedStandard,
+        title: const Text('Filter Content'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Standard:'),
+            const SizedBox(height: 8),
+            DropdownButton<String?>(
+              value: provider.selectedStandard,
+              isExpanded: true,
+              items: [
+                const DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text('All Standards'),
+                ),
+                ...provider.availableStandards.map(
+                  (standard) => DropdownMenuItem<String?>(
+                    value: standard,
+                    child: Text(standard),
+                  ),
+                ),
+              ],
+              onChanged: (value) {
+                provider.setSelectedStandard(value);
+                Navigator.of(context).pop();
+              },
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                const Text('Show Registered Only'),
+                const Spacer(),
+                Switch(
+                  value: provider.showRegisteredOnly,
                   onChanged: (value) {
-                    if (value != null) {
-                      provider.setSelectedStandard(value);
-                    }
-                    Navigator.pop(context);
+                    provider.setShowRegisteredOnly(value);
+                    Navigator.of(context).pop();
                   },
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () {
               provider.clearFilters();
-              Navigator.pop(context);
+              Navigator.of(context).pop();
             },
-            child: const Text('Clear All'),
+            child: const Text('Clear Filters'),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
           ),
         ],
       ),

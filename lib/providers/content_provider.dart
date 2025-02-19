@@ -16,6 +16,7 @@ class ContentProvider with ChangeNotifier {
   String? _error;
   String _searchQuery = '';
   String? _selectedStandard;
+  bool _showRegisteredOnly = false;
 
   ContentProvider(this._service) {
     initialize();
@@ -64,6 +65,11 @@ class ContentProvider with ChangeNotifier {
       }).toList();
     }
 
+    // Apply registered filter if enabled
+    if (_showRegisteredOnly) {
+      filteredContents = filteredContents.where((content) => content.rps > 0).toList();
+    }
+
     return filteredContents;
   }
 
@@ -82,6 +88,7 @@ class ContentProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
   String get searchQuery => _searchQuery;
+  bool get showRegisteredOnly => _showRegisteredOnly;
 
   void setSearchQuery(String query) {
     _searchQuery = query;
@@ -98,9 +105,15 @@ class ContentProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  void setShowRegisteredOnly(bool value) {
+    _showRegisteredOnly = value;
+    notifyListeners();
+  }
+
   void clearFilters() {
     _selectedStandard = null;
     _searchQuery = '';
+    _showRegisteredOnly = false;
     notifyListeners();
   }
 
@@ -296,6 +309,35 @@ class ContentProvider with ChangeNotifier {
   void clearError() {
     _error = null;
     notifyListeners();
+  }
+
+  void updateContentProfile(String contentId, String owner, int rps) {
+    final index = _contents.indexWhere((content) => content.id == contentId);
+    if (index != -1) {
+      final content = _contents[index];
+      _contents[index] = PortableContent(
+        id: content.id,
+        name: content.name,
+        description: content.description,
+        standardName: content.standardName,
+        standardVersion: content.standardVersion,
+        standardData: content.standardData,
+        contentHash: content.contentHash,
+        parts: content.parts,
+        createdAt: content.createdAt,
+        updatedAt: content.updatedAt,
+        owner: owner,
+        rps: rps,
+      );
+      if (_currentContent?.id == contentId) {
+        _currentContent = _contents[index];
+      }
+
+      // Persist the changes
+      _service.updateContent(_contents[index]);
+      
+      notifyListeners();
+    }
   }
 
   void _setError(String error) {
