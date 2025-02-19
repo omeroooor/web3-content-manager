@@ -20,14 +20,16 @@ class AppLogo extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Web3 icon
+        // Web3 Content Management logo
         Stack(
           children: [
+            // Web3/Blockchain network icon
             Icon(
-              Icons.hub_outlined,  // Using hub icon to represent network/blockchain
+              Icons.hub_outlined,
               size: size,
               color: logoColor,
             ),
+            // W3 indicator
             Positioned(
               right: 0,
               bottom: 0,
@@ -57,10 +59,10 @@ class AppLogo extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             'W3CM',
-            style: theme.textTheme.titleMedium?.copyWith(
+            style: TextStyle(
               color: logoColor,
+              fontSize: size * 0.8,
               fontWeight: FontWeight.bold,
-              letterSpacing: 1,
             ),
           ),
         ],
