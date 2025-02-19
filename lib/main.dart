@@ -7,6 +7,7 @@ import 'services/content_service.dart';
 import 'services/bitcoin_service.dart';
 import 'screens/content_list_screen.dart';
 import 'screens/settings_screen.dart';
+import 'widgets/app_logo.dart';
 
 void main() {
   runApp(const MyApp());
@@ -54,7 +55,7 @@ class MyApp extends StatelessWidget {
         ),
       ],
       child: MaterialApp(
-        title: 'Portable Content Manager',
+        title: 'Web3 Content Manager',
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
           useMaterial3: true,
@@ -72,13 +73,27 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Portable Content Manager'),
+        title: const AppLogo(),
         actions: [
+          // Create Content button
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: () => context.read<ContentProvider>().createContent(context),
+            tooltip: 'Create Content',
+          ),
+          // Import Content button
+          IconButton(
+            icon: const Icon(Icons.file_upload),
+            onPressed: () => context.read<ContentProvider>().importContent(),
+            tooltip: 'Import Content',
+          ),
+          // Refresh button
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () => context.read<ContentProvider>().refresh(),
             tooltip: 'Refresh',
           ),
+          // Settings button
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {

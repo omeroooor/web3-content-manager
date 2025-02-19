@@ -14,45 +14,7 @@ class ContentListScreen extends StatefulWidget {
   State<ContentListScreen> createState() => _ContentListScreenState();
 }
 
-class _ContentListScreenState extends State<ContentListScreen> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  bool _isDialOpen = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 200),
-      vsync: this,
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _toggleSpeedDial() {
-    setState(() {
-      _isDialOpen = !_isDialOpen;
-      if (_isDialOpen) {
-        _controller.forward();
-      } else {
-        _controller.reverse();
-      }
-    });
-  }
-
-  void _closeSpeedDial() {
-    if (_isDialOpen) {
-      setState(() {
-        _isDialOpen = false;
-        _controller.reverse();
-      });
-    }
-  }
-
+class _ContentListScreenState extends State<ContentListScreen> {
   void _showMessage(BuildContext context, String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -179,113 +141,6 @@ class _ContentListScreenState extends State<ContentListScreen> with SingleTicker
     );
   }
 
-  Widget _buildSpeedDial(BuildContext context, ContentProvider contentProvider) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        if (_isDialOpen) ...[
-          SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(1, 0),
-              end: Offset.zero,
-            ).animate(CurvedAnimation(
-              parent: _controller,
-              curve: Curves.easeOut,
-            )),
-            child: _SpeedDialChild(
-              icon: Icons.add,
-              label: 'Create Content',
-              onTap: () {
-                _closeSpeedDial();
-                contentProvider.createContent(context);
-              },
-              backgroundColor: Theme.of(context).colorScheme.primary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(1, 0),
-              end: Offset.zero,
-            ).animate(CurvedAnimation(
-              parent: _controller,
-              curve: Curves.easeOut,
-            )),
-            child: _SpeedDialChild(
-              icon: Icons.file_upload,
-              label: 'Import Content',
-              onTap: () {
-                _closeSpeedDial();
-                contentProvider.importContent();
-              },
-              backgroundColor: Theme.of(context).colorScheme.secondary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(1, 0),
-              end: Offset.zero,
-            ).animate(CurvedAnimation(
-              parent: _controller,
-              curve: Curves.easeOut,
-            )),
-            child: _SpeedDialChild(
-              icon: Icons.file_download,
-              label: 'Export Content',
-              onTap: () {
-                _closeSpeedDial();
-                contentProvider.exportContent();
-              },
-              backgroundColor: Theme.of(context).colorScheme.tertiary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(1, 0),
-              end: Offset.zero,
-            ).animate(CurvedAnimation(
-              parent: _controller,
-              curve: Curves.easeOut,
-            )),
-            child: _SpeedDialChild(
-              icon: Icons.verified,
-              label: 'Verify Content',
-              onTap: () async {
-                _closeSpeedDial();
-                try {
-                  final isValid = await contentProvider.verifyContent();
-                  if (context.mounted) {
-                    _showMessage(
-                      context,
-                      isValid ? 'Content verification successful!' : 'Content verification failed',
-                      isError: !isValid,
-                    );
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    _showMessage(context, 'Verification error: $e', isError: true);
-                  }
-                }
-              },
-              backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 16),
-        ],
-        FloatingActionButton(
-          onPressed: _toggleSpeedDial,
-          child: AnimatedIcon(
-            icon: AnimatedIcons.menu_close,
-            progress: _controller,
-          ),
-        ),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Consumer<ContentProvider>(
@@ -310,7 +165,7 @@ class _ContentListScreenState extends State<ContentListScreen> with SingleTicker
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Tap + to create or import content',
+                        'Use + to create or ↑ to import content',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: Colors.grey,
                             ),
@@ -319,11 +174,9 @@ class _ContentListScreenState extends State<ContentListScreen> with SingleTicker
                   ),
                 )
               : ListView.builder(
-                  padding: const EdgeInsets.only(
-                    left: 16,
-                    right: 16,
-                    top: 8,
-                    bottom: 80, // Add extra padding at the bottom for FAB
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
                   ),
                   itemCount: contentProvider.contents.length,
                   itemBuilder: (context, index) {
@@ -370,7 +223,6 @@ class _ContentListScreenState extends State<ContentListScreen> with SingleTicker
                     );
                   },
                 ),
-          floatingActionButton: _buildSpeedDial(context, contentProvider),
         );
 
         // Show loading indicator as an overlay
@@ -393,88 +245,8 @@ class _ContentListScreenState extends State<ContentListScreen> with SingleTicker
           );
         }
 
-        // Show error as a banner if present
-        if (contentProvider.error != null) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            ScaffoldMessenger.of(context).showMaterialBanner(
-              MaterialBanner(
-                content: Text(contentProvider.error!),
-                leading: const Icon(Icons.error_outline, color: Colors.red),
-                actions: [
-                  TextButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
-                      contentProvider.clearError();
-                    },
-                    child: const Text('DISMISS'),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
-                      contentProvider.refresh();
-                    },
-                    child: const Text('RETRY'),
-                  ),
-                ],
-                backgroundColor: Theme.of(context).colorScheme.errorContainer,
-                contentTextStyle: TextStyle(
-                  color: Theme.of(context).colorScheme.onErrorContainer,
-                ),
-              ),
-            );
-          });
-        }
-
-        return GestureDetector(
-          onTap: _closeSpeedDial,
-          child: mainContent,
-        );
+        return mainContent;
       },
-    );
-  }
-}
-
-class _SpeedDialChild extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final Color backgroundColor;
-
-  const _SpeedDialChild({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    required this.backgroundColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(48),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Card(
-                color: backgroundColor,
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Icon(
-                    icon,
-                    color: Theme.of(context).colorScheme.onPrimary,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(label),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
