@@ -14,6 +14,8 @@ class ContentProvider with ChangeNotifier {
   List<File>? _currentFiles;
   bool _isLoading = false;
   String? _error;
+  String _searchQuery = '';
+  String? _selectedStandard;
 
   ContentProvider(this._service) {
     initialize();
@@ -41,11 +43,66 @@ class ContentProvider with ChangeNotifier {
     await initialize();
   }
 
-  List<PortableContent> get contents => _contents;
+  List<PortableContent> get contents {
+    var filteredContents = _contents;
+    
+    // Apply standard filter if selected
+    if (_selectedStandard != null) {
+      filteredContents = filteredContents.where(
+        (content) => content.standardName == _selectedStandard
+      ).toList();
+    }
+
+    // Apply search query if not empty
+    if (_searchQuery.isNotEmpty) {
+      final query = _searchQuery.toLowerCase();
+      filteredContents = filteredContents.where((content) {
+        return content.name.toLowerCase().contains(query) ||
+            content.contentHash.toLowerCase().contains(query) ||
+            content.standardName.toLowerCase().contains(query) ||
+            content.description.toLowerCase().contains(query);
+      }).toList();
+    }
+
+    return filteredContents;
+  }
+
+  // Get unique list of standards from content
+  List<String> get availableStandards {
+    return _contents
+        .map((content) => content.standardName)
+        .toSet()
+        .toList()
+      ..sort();
+  }
+
   PortableContent? get currentContent => _currentContent;
   List<File>? get currentFiles => _currentFiles;
+  String? get selectedStandard => _selectedStandard;
   bool get isLoading => _isLoading;
   String? get error => _error;
+  String get searchQuery => _searchQuery;
+
+  void setSearchQuery(String query) {
+    _searchQuery = query;
+    notifyListeners();
+  }
+
+  void clearSearch() {
+    _searchQuery = '';
+    notifyListeners();
+  }
+
+  void setSelectedStandard(String? standard) {
+    _selectedStandard = standard;
+    notifyListeners();
+  }
+
+  void clearFilters() {
+    _selectedStandard = null;
+    _searchQuery = '';
+    notifyListeners();
+  }
 
   void selectContent(String id) {
     print('\nSelecting content: $id');
