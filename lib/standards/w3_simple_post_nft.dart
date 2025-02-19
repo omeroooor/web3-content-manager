@@ -41,33 +41,52 @@ class W3SimplePostNFTStandard implements ContentStandard {
     // Handle media file if present
     if (files.isNotEmpty) {
       final mediaFile = files[0];
-      final extension = path.extension(mediaFile.path).toLowerCase();
       
-      // Validate file type
-      if (!_isValidMediaType(extension)) {
-        throw Exception(
-          'Invalid media file type: $extension. Supported types: .jpg, .jpeg, .png, .gif, .mp4, .mov',
-        );
+      // If we're validating existing content, use the mediaType from data
+      if (data.containsKey('mediaType')) {
+        validatedData['mediaType'] = data['mediaType'];
+        validatedData['mediaPath'] = mediaFile.path;
+        
+        // Verify checksum if provided
+        if (data.containsKey('mediaChecksum')) {
+          final bytes = await mediaFile.readAsBytes();
+          final checksum = sha256.convert(bytes).toString();
+          
+          if (checksum != data['mediaChecksum']) {
+            throw Exception('Media file checksum mismatch');
+          }
+          validatedData['mediaChecksum'] = checksum;
+        }
+      } else {
+        // This is new content, validate the file type
+        final extension = path.extension(mediaFile.path).toLowerCase();
+        
+        // Validate file type
+        if (!_isValidMediaType(extension)) {
+          throw Exception(
+            'Invalid media file type: $extension. Supported types: .jpg, .jpeg, .png, .gif, .mp4, .mov',
+          );
+        }
+
+        // Validate file size
+        final bytes = await mediaFile.readAsBytes();
+        final isVideo = _isVideoFile(extension);
+        final maxSize = isVideo ? 50 * 1024 * 1024 : 5 * 1024 * 1024; // 50MB for video, 5MB for images
+        
+        if (bytes.length > maxSize) {
+          throw Exception(
+            'Media file too large: ${mediaFile.path}. Maximum size: ${maxSize ~/ (1024 * 1024)}MB',
+          );
+        }
+
+        // Compute media checksum
+        final checksum = sha256.convert(bytes).toString();
+        print('Computed media checksum: $checksum');
+
+        validatedData['mediaPath'] = mediaFile.path;
+        validatedData['mediaType'] = _getMediaType(extension);
+        validatedData['mediaChecksum'] = checksum;
       }
-
-      // Validate file size
-      final bytes = await mediaFile.readAsBytes();
-      final isVideo = _isVideoFile(extension);
-      final maxSize = isVideo ? 50 * 1024 * 1024 : 5 * 1024 * 1024; // 50MB for video, 5MB for images
-      
-      if (bytes.length > maxSize) {
-        throw Exception(
-          'Media file too large: ${mediaFile.path}. Maximum size: ${maxSize ~/ (1024 * 1024)}MB',
-        );
-      }
-
-      // Compute media checksum
-      final checksum = sha256.convert(bytes).toString();
-      print('Computed media checksum: $checksum');
-
-      validatedData['mediaPath'] = mediaFile.path;
-      validatedData['mediaType'] = _getMediaType(extension);
-      validatedData['mediaChecksum'] = checksum;
     }
 
     print('Data validation successful');

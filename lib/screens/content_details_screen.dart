@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/content_part.dart';
 import '../providers/content_provider.dart';
 import 'package:provider/provider.dart';
@@ -161,6 +162,16 @@ Note: The content file is attached to this share.
     }
   }
 
+  Future<void> _sendReputation() async {
+    final uri = Uri.parse('bluewallet:send?addresses=${content.contentHash}-0.001-reputation');
+    
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else {
+      debugPrint('Could not launch BlueWallet');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -171,6 +182,11 @@ Note: The content file is attached to this share.
             icon: const Icon(Icons.share),
             onPressed: () => _shareContent(context),
             tooltip: 'Share',
+          ),
+          IconButton(
+            icon: const Icon(Icons.monetization_on_outlined),
+            onPressed: _sendReputation,
+            tooltip: 'Send Reputation',
           ),
         ],
       ),
@@ -386,7 +402,40 @@ Note: The content file is attached to this share.
               ),
             ),
           ),
+          if (content.standardName == 'W3-S-POST-NFT') ...[
+            const SizedBox(height: 16),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Post Content',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(content.standardData['text'] as String),
+                    if (content.standardData.containsKey('mediaPath')) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        'Media',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(content.standardData['mediaPath'] as String),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _sendReputation,
+        icon: const Icon(Icons.monetization_on_outlined),
+        label: const Text('Send Reputation'),
       ),
     );
   }

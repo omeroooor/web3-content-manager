@@ -570,13 +570,9 @@ class ContentService {
   Future<bool> verifyContent(PortableContent content, List<File> files) async {
     print('Starting content verification...');
     print('Content ID: ${content.id}');
+    print('Standard: ${content.standardName}');
     print('Number of parts: ${content.parts.length}');
     print('Number of files: ${files.length}');
-
-    if (content.parts.length != files.length) {
-      print('Verification failed: Number of parts (${content.parts.length}) does not match number of files (${files.length})');
-      return false;
-    }
 
     try {
       // Get the standard
@@ -587,51 +583,63 @@ class ContentService {
       }
       print('Using standard: ${content.standardName} v${content.standardVersion}');
 
-      // Verify individual files
-      for (var i = 0; i < content.parts.length; i++) {
-        final part = content.parts[i];
-        final file = files[i];
-        print('Verifying file ${i + 1}/${files.length}: ${part.name}');
-        print('File path: ${file.path}');
-        
-        if (!await file.exists()) {
-          print('Verification failed: File does not exist: ${file.path}');
+      // For W3-S-POST-NFT, we only verify files if they exist
+      final shouldVerifyFiles = content.standardName == 'W3-S-POST-NFT' 
+          ? content.standardData.containsKey('mediaPath')
+          : true;
+
+      if (shouldVerifyFiles) {
+        if (content.parts.length != files.length) {
+          print('Verification failed: Number of parts (${content.parts.length}) does not match number of files (${files.length})');
           return false;
         }
 
-        final bytes = await file.readAsBytes();
-        print('File size: ${bytes.length} bytes');
-        final hash = await computeHash(bytes);
-        print('Computed hash: $hash');
-        print('Expected hash: ${part.hash}');
+        // Verify individual files
+        for (var i = 0; i < content.parts.length; i++) {
+          final part = content.parts[i];
+          final file = files[i];
+          print('Verifying file ${i + 1}/${files.length}: ${part.name}');
+          print('File path: ${file.path}');
+          
+          if (!await file.exists()) {
+            print('Verification failed: File does not exist: ${file.path}');
+            return false;
+          }
 
-        if (hash != part.hash) {
-          print('Verification failed: Hash mismatch for file ${part.name}');
-          print('Expected: ${part.hash}');
-          print('Got: $hash');
-          return false;
+          final bytes = await file.readAsBytes();
+          print('File size: ${bytes.length} bytes');
+          final hash = await computeHash(bytes);
+          print('Computed hash: $hash');
+          print('Expected hash: ${part.hash}');
+
+          if (hash != part.hash) {
+            print('Verification failed: Hash mismatch for file ${part.name}');
+            print('Expected: ${part.hash}');
+            print('Got: $hash');
+            return false;
+          }
         }
       }
 
       // Validate standard data
       print('Validating standard data...');
       try {
-        await standard.validateData(content.standardData, files);
+        final validatedData = await standard.validateData(content.standardData, files);
         print('Standard data validation successful');
+
+        // Verify content hash using validated data
+        print('Verifying content hash...');
+        final computedContentHash = await standard.computeHash(validatedData, content.parts);
+        print('Computed content hash: $computedContentHash');
+        print('Expected content hash: ${content.contentHash}');
+        
+        final isValid = computedContentHash == content.contentHash;
+        print(isValid ? 'Content verification successful' : 'Content hash verification failed');
+        return isValid;
       } catch (e) {
         print('Standard data validation failed: $e');
         return false;
       }
-
-      // Verify content hash
-      print('Verifying content hash...');
-      final computedContentHash = await standard.computeHash(content.standardData, content.parts);
-      print('Computed content hash: $computedContentHash');
-      print('Expected content hash: ${content.contentHash}');
-      
-      final isValid = computedContentHash == content.contentHash;
-      print(isValid ? 'Content verification successful' : 'Content hash verification failed');
-      return isValid;
     } catch (e) {
       print('Verification error: $e');
       return false;
