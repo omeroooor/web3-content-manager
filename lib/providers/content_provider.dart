@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../models/content_part.dart';
 import '../services/content_service.dart';
+import '../widgets/content_form_dialog.dart';
 
 class ContentProvider with ChangeNotifier {
   final ContentService _service;
@@ -60,12 +61,25 @@ class ContentProvider with ChangeNotifier {
     }
   }
 
-  Future<void> createContent() async {
+  Future<void> createContent(BuildContext context) async {
+    print('\nCreating new content...');
     _error = null;
     _setLoading(true);
 
     try {
+      // Show form dialog to get content details
+      final formResult = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (context) => const ContentFormDialog(),
+      );
+
+      if (formResult == null) {
+        print('Content creation cancelled by user');
+        return;
+      }
+
       // Show file picker for image
+      print('Opening file picker for image selection...');
       final result = await FilePicker.platform.pickFiles(
         type: FileType.image,
         allowMultiple: false,
@@ -79,27 +93,35 @@ class ContentProvider with ChangeNotifier {
       final file = File(result.files.first.path!);
       final files = [file];
       
-      // Create new content with the selected image
+      print('Selected image file: ${file.path}');
+      print('File size: ${await file.length()} bytes');
+
+      // Create new content with the selected image and form data
       final content = await _service.createContent(
-        name: 'New Content',
-        description: 'Description',
+        name: formResult['name'],
+        description: formResult['description'],
         standardName: 'W3-Gamified-NFT',
         standardVersion: '1.0.0',
         standardData: {
-          'code': 'CODE123',
-          'owner': '1234567890abcdef',
-          'nonce': 1,
+          'code': formResult['code'],
+          'owner': formResult['owner'],
+          'nonce': formResult['nonce'],
           'image': file.path,
+          // Note: checksum is intentionally not set here for new content
         },
         files: files,
       );
 
+      print('Content created successfully');
       _currentContent = content;
       _currentFiles = files;
       _contents = _service.getAllContents();
       notifyListeners();
     } catch (e) {
+      print('Error creating content: $e');
       _setError('Failed to create content: $e');
+      notifyListeners();
+      rethrow;
     } finally {
       _setLoading(false);
     }

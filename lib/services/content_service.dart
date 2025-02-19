@@ -535,15 +535,30 @@ class ContentService {
       }
 
       print('Validating standard data...');
-      await standard.validateData(content.standardData, files);
+      // Create a copy of the standard data and update it with the validated data
+      final validatedData = await standard.validateData(content.standardData, files);
 
+      // Compute content hash with validated data
       print('Computing content hash...');
-      final newContentHash = await standard.computeHash(content.standardData, content.parts);
-      content.contentHash = newContentHash;
+      final newContentHash = await standard.computeHash(validatedData, content.parts);
       print('New content hash: $newContentHash');
 
+      // Create a new content instance with the validated data and new hash
+      final validatedContent = PortableContent(
+        id: content.id,
+        name: content.name,
+        description: content.description,
+        standardName: content.standardName,
+        standardVersion: content.standardVersion,
+        standardData: validatedData,
+        contentHash: newContentHash,
+        parts: content.parts,
+        createdAt: content.createdAt,
+        updatedAt: content.updatedAt,
+      );
+
       print('\n=== Import Complete ===');
-      return (content, files);
+      return (validatedContent, files);
     } catch (e) {
       print('ERROR in _importContent: $e');
       rethrow;

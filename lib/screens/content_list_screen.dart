@@ -198,7 +198,7 @@ class _ContentListScreenState extends State<ContentListScreen> with SingleTicker
               label: 'Create Content',
               onTap: () {
                 _closeSpeedDial();
-                contentProvider.createContent();
+                contentProvider.createContent(context);
               },
               backgroundColor: Theme.of(context).colorScheme.primary,
             ),
@@ -291,23 +291,6 @@ class _ContentListScreenState extends State<ContentListScreen> with SingleTicker
     return Consumer<ContentProvider>(
       builder: (context, contentProvider, child) {
         Widget mainContent = Scaffold(
-          appBar: AppBar(
-            title: const Text('Portable Content Manager'),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: () => contentProvider.refresh(),
-                tooltip: 'Refresh',
-              ),
-              IconButton(
-                icon: const Icon(Icons.settings),
-                onPressed: () {
-                  // TODO: Implement settings
-                },
-                tooltip: 'Settings',
-              ),
-            ],
-          ),
           body: contentProvider.contents.isEmpty
               ? Center(
                   child: Column(
@@ -336,15 +319,18 @@ class _ContentListScreenState extends State<ContentListScreen> with SingleTicker
                   ),
                 )
               : ListView.builder(
+                  padding: const EdgeInsets.only(
+                    left: 16,
+                    right: 16,
+                    top: 8,
+                    bottom: 80, // Add extra padding at the bottom for FAB
+                  ),
                   itemCount: contentProvider.contents.length,
                   itemBuilder: (context, index) {
                     final content = contentProvider.contents[index];
                     final id = content.id;
                     return Card(
-                      margin: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
+                      margin: const EdgeInsets.symmetric(vertical: 8),
                       child: ListTile(
                         leading: const Icon(Icons.description),
                         title: Text(

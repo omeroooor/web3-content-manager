@@ -75,6 +75,11 @@ class HomeScreen extends StatelessWidget {
         title: const Text('Portable Content Manager'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => context.read<ContentProvider>().refresh(),
+            tooltip: 'Refresh',
+          ),
+          IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {
               Navigator.push(
@@ -82,6 +87,7 @@ class HomeScreen extends StatelessWidget {
                 MaterialPageRoute(builder: (context) => const SettingsScreen()),
               );
             },
+            tooltip: 'Settings',
           ),
         ],
       ),
