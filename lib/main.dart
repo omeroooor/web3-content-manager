@@ -1,16 +1,46 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'providers/content_provider.dart';
 import 'providers/bitcoin_provider.dart';
 import 'providers/settings_provider.dart';
+import 'providers/theme_provider.dart';
 import 'services/content_service.dart';
 import 'services/bitcoin_service.dart';
 import 'screens/content_list_screen.dart';
 import 'screens/settings_screen.dart';
 import 'widgets/app_logo.dart';
 
-void main() {
-  runApp(const MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  final prefs = await SharedPreferences.getInstance();
+  final settingsProvider = SettingsProvider(prefs);
+  final themeProvider = ThemeProvider(prefs);
+  final bitcoinProvider = BitcoinProvider();
+  
+  // Initialize Bitcoin service if settings exist
+  final nodeSettings = settingsProvider.nodeSettings;
+  if (nodeSettings != null) {
+    await bitcoinProvider.initializeService(
+      host: nodeSettings.host,
+      port: nodeSettings.port,
+      username: nodeSettings.username,
+      password: nodeSettings.password,
+    );
+  }
+  
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => bitcoinProvider),
+        ChangeNotifierProvider(create: (_) => settingsProvider),
+        ChangeNotifierProvider(create: (_) => themeProvider),
+        ChangeNotifierProvider(create: (_) => ContentProvider()),
+      ],
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -18,53 +48,20 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        Provider(
-          create: (_) => ContentService(),
-        ),
-        Provider(
-          create: (_) => BitcoinService(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => SettingsProvider(),
-        ),
-        ChangeNotifierProxyProvider<ContentService, ContentProvider>(
-          create: (context) => ContentProvider(
-            context.read<ContentService>(),
-          ),
-          update: (context, contentService, previous) =>
-              previous ?? ContentProvider(contentService),
-        ),
-        ChangeNotifierProxyProvider2<BitcoinService, SettingsProvider, BitcoinProvider>(
-          create: (context) => BitcoinProvider(
-            context.read<BitcoinService>(),
-          ),
-          update: (context, bitcoinService, settings, previous) {
-            if (settings.nodeSettings != null) {
-              final nodeSettings = settings.nodeSettings!;
-              bitcoinService.initialize(
-                host: nodeSettings.host,
-                port: nodeSettings.port,
-                username: nodeSettings.username,
-                password: nodeSettings.password,
-              );
-            }
-            return previous ?? BitcoinProvider(bitcoinService);
-          },
-        ),
-      ],
-      child: MaterialApp(
-        title: 'Web3 Content Manager',
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-          useMaterial3: true,
-        ),
-        home: const HomeScreen(),
-      ),
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        return MaterialApp(
+          title: 'W3CM',
+          theme: themeProvider.lightTheme,
+          darkTheme: themeProvider.darkTheme,
+          themeMode: themeProvider.themeMode,
+          home: const HomeScreen(),
+        );
+      },
     );
   }
 }
+
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -139,7 +136,13 @@ class HomeScreen extends StatelessWidget {
       builder: (context, contentProvider, child) {
         return Scaffold(
           appBar: AppBar(
-            title: const AppLogo(),
+            title: Row(
+              children: [
+                const AppLogo(),
+                const SizedBox(width: 8),
+                const Text('W3CM'),
+              ],
+            ),
             actions: [
               // Create Content button
               IconButton(

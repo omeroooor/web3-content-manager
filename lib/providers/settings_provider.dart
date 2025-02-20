@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class NodeSettings {
@@ -15,60 +15,67 @@ class NodeSettings {
     required this.password,
   });
 
-  Map<String, dynamic> toJson() => {
-    'host': host,
-    'port': port,
-    'username': username,
-    'password': password,
-  };
+  factory NodeSettings.defaults() {
+    return NodeSettings(
+      host: 'localhost',
+      port: 19332,
+      username: '',
+      password: '',
+    );
+  }
 
-  factory NodeSettings.fromJson(Map<String, dynamic> json) => NodeSettings(
-    host: json['host'] as String,
-    port: json['port'] as int,
-    username: json['username'] as String,
-    password: json['password'] as String,
-  );
+  Map<String, dynamic> toJson() {
+    return {
+      'host': host,
+      'port': port,
+      'username': username,
+      'password': password,
+    };
+  }
 
-  factory NodeSettings.defaults() => NodeSettings(
-    host: 'localhost',
-    port: 19332,
-    username: 'user',
-    password: 'pass',
-  );
+  factory NodeSettings.fromJson(Map<String, dynamic> json) {
+    return NodeSettings(
+      host: json['host'] as String,
+      port: json['port'] as int,
+      username: json['username'] as String,
+      password: json['password'] as String,
+    );
+  }
 }
 
-class SettingsProvider extends ChangeNotifier {
-  static const _nodeSettingsKey = 'node_settings';
-  late SharedPreferences _prefs;
+class SettingsProvider with ChangeNotifier {
+  static const String _settingsKey = 'node_settings';
+  final SharedPreferences _prefs;
   NodeSettings? _nodeSettings;
-  bool _isLoading = true;
   String? _error;
+  bool _isLoading = false;
 
-  SettingsProvider() {
+  SettingsProvider(this._prefs) {
     _loadSettings();
   }
 
-  bool get isLoading => _isLoading;
-  String? get error => _error;
   NodeSettings? get nodeSettings => _nodeSettings;
+  String? get error => _error;
+  bool get isLoading => _isLoading;
 
   Future<void> _loadSettings() async {
+    _isLoading = true;
+    notifyListeners();
+
     try {
-      _prefs = await SharedPreferences.getInstance();
-      final settingsJson = _prefs.getString(_nodeSettingsKey);
-      
+      final settingsJson = _prefs.getString(_settingsKey);
       if (settingsJson != null) {
-        _nodeSettings = NodeSettings.fromJson(
-          jsonDecode(settingsJson) as Map<String, dynamic>
+        final Map<String, dynamic> json = Map<String, dynamic>.from(
+          jsonDecode(settingsJson) as Map,
         );
+        _nodeSettings = NodeSettings.fromJson(json);
       } else {
         _nodeSettings = NodeSettings.defaults();
         await saveNodeSettings(_nodeSettings!);
       }
-      
       _error = null;
     } catch (e) {
-      _error = e.toString();
+      _error = 'Failed to load settings: $e';
       print('Error loading settings: $e');
     } finally {
       _isLoading = false;
@@ -77,15 +84,16 @@ class SettingsProvider extends ChangeNotifier {
   }
 
   Future<void> saveNodeSettings(NodeSettings settings) async {
-    try {
-      _isLoading = true;
-      notifyListeners();
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
 
-      await _prefs.setString(_nodeSettingsKey, jsonEncode(settings.toJson()));
+    try {
+      await _prefs.setString(_settingsKey, jsonEncode(settings.toJson()));
       _nodeSettings = settings;
       _error = null;
     } catch (e) {
-      _error = e.toString();
+      _error = 'Failed to save settings: $e';
       print('Error saving settings: $e');
     } finally {
       _isLoading = false;

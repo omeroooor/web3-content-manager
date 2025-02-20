@@ -8,7 +8,7 @@ import '../services/content_service.dart';
 import '../widgets/standard_content_form_dialog.dart';
 
 class ContentProvider with ChangeNotifier {
-  final ContentService _service;
+  final _service = ContentService();
   List<PortableContent> _contents = [];
   PortableContent? _currentContent;
   List<File>? _currentFiles;
@@ -18,7 +18,7 @@ class ContentProvider with ChangeNotifier {
   String? _selectedStandard;
   bool _showRegisteredOnly = false;
 
-  ContentProvider(this._service) {
+  ContentProvider() {
     initialize();
   }
 

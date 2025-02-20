@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/bitcoin_provider.dart';
 import '../services/bitcoin_service.dart';
+import '../providers/theme_provider.dart'; // Add this line
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -50,8 +51,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final settingsProvider = context.read<SettingsProvider>();
     await settingsProvider.saveNodeSettings(settings);
 
-    // Clear any cached profiles when settings change
+    // Initialize Bitcoin service with new settings
     final bitcoinProvider = context.read<BitcoinProvider>();
+    await bitcoinProvider.initializeService(
+      host: settings.host,
+      port: settings.port,
+      username: settings.username,
+      password: settings.password,
+    );
+
+    // Clear any cached profiles when settings change
     bitcoinProvider.clearProfiles();
 
     if (mounted) {
@@ -99,64 +108,135 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  TextFormField(
-                    controller: _hostController,
-                    decoration: const InputDecoration(
-                      labelText: 'Node Address',
-                      hintText: 'e.g., localhost or http://localhost',
-                      helperText: 'You can include http:// or https:// in the address',
+                  // Theme Settings
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Theme',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const SizedBox(height: 16),
+                          Consumer<ThemeProvider>(
+                            builder: (context, themeProvider, child) {
+                              return Column(
+                                children: [
+                                  RadioListTile<ThemeMode>(
+                                    title: const Text('System'),
+                                    value: ThemeMode.system,
+                                    groupValue: themeProvider.themeMode,
+                                    onChanged: (ThemeMode? value) {
+                                      if (value != null) {
+                                        themeProvider.setThemeMode(value);
+                                      }
+                                    },
+                                  ),
+                                  RadioListTile<ThemeMode>(
+                                    title: const Text('Light'),
+                                    value: ThemeMode.light,
+                                    groupValue: themeProvider.themeMode,
+                                    onChanged: (ThemeMode? value) {
+                                      if (value != null) {
+                                        themeProvider.setThemeMode(value);
+                                      }
+                                    },
+                                  ),
+                                  RadioListTile<ThemeMode>(
+                                    title: const Text('Dark'),
+                                    value: ThemeMode.dark,
+                                    groupValue: themeProvider.themeMode,
+                                    onChanged: (ThemeMode? value) {
+                                      if (value != null) {
+                                        themeProvider.setThemeMode(value);
+                                      }
+                                    },
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ],
+                      ),
                     ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter the node address';
-                      }
-                      return null;
-                    },
                   ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _portController,
-                    decoration: const InputDecoration(
-                      labelText: 'Port',
-                      hintText: 'e.g., 19332',
+                  const SizedBox(height: 24),
+                  // Node Settings
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Node Settings',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _hostController,
+                            decoration: const InputDecoration(
+                              labelText: 'Node Address',
+                              hintText: 'e.g., localhost or http://localhost',
+                              helperText: 'You can include http:// or https:// in the address',
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter the node address';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _portController,
+                            decoration: const InputDecoration(
+                              labelText: 'Port',
+                              hintText: 'e.g., 19332',
+                            ),
+                            keyboardType: TextInputType.number,
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter the port number';
+                              }
+                              if (int.tryParse(value) == null) {
+                                return 'Please enter a valid port number';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _usernameController,
+                            decoration: const InputDecoration(
+                              labelText: 'Username',
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter a username';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _passwordController,
+                            decoration: const InputDecoration(
+                              labelText: 'Password',
+                            ),
+                            obscureText: true,
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter a password';
+                              }
+                              return null;
+                            },
+                          ),
+                        ],
+                      ),
                     ),
-                    keyboardType: TextInputType.number,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter the port number';
-                      }
-                      if (int.tryParse(value) == null) {
-                        return 'Please enter a valid port number';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _usernameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Username',
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter a username';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _passwordController,
-                    decoration: const InputDecoration(
-                      labelText: 'Password',
-                    ),
-                    obscureText: true,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter a password';
-                      }
-                      return null;
-                    },
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton(
