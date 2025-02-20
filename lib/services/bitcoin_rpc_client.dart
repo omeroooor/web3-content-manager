@@ -18,7 +18,15 @@ class BitcoinRPCClient {
   }) : _auth = base64Encode(utf8.encode('$username:$password'));
 
   Future<Map<String, dynamic>> command(String method, [List<dynamic>? params]) async {
-    final url = Uri.http('$host:$port', '/');
+    // Parse the host to handle protocol
+    String cleanHost = host;
+    if (host.startsWith('http://')) {
+      cleanHost = host.substring(7);
+    } else if (host.startsWith('https://')) {
+      cleanHost = host.substring(8);
+    }
+    
+    final url = Uri.http('$cleanHost:$port', '/');
     final requestBody = {
       'jsonrpc': '2.0',
       'id': DateTime.now().millisecondsSinceEpoch,

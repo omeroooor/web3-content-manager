@@ -102,12 +102,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   TextFormField(
                     controller: _hostController,
                     decoration: const InputDecoration(
-                      labelText: 'Host',
-                      hintText: 'e.g., localhost',
+                      labelText: 'Node Address',
+                      hintText: 'e.g., localhost or http://localhost',
+                      helperText: 'You can include http:// or https:// in the address',
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'Please enter a host';
+                        return 'Please enter the node address';
                       }
                       return null;
                     },
@@ -122,7 +123,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     keyboardType: TextInputType.number,
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'Please enter a port';
+                        return 'Please enter the port number';
                       }
                       if (int.tryParse(value) == null) {
                         return 'Please enter a valid port number';
