@@ -144,15 +144,18 @@ class ContentProvider with ChangeNotifier {
 
         final standardName = result['standard'] as String;
         final files = <File>[];
-
-        // Handle standard-specific files
-        if (standardName == 'W3-S-POST-NFT' && result.containsKey('mediaFile')) {
-          files.add(File(result['mediaFile']));
+        if (result.containsKey('mediaFile')) {
+          final mediaPath = result['mediaFile'] as String;
+          if (mediaPath.isNotEmpty) {
+            files.add(File(mediaPath));
+          }
         }
 
         final standardData = Map<String, dynamic>.from(result)
           ..remove('standard')
           ..remove('mediaFile');
+
+        print('Initial standardData: $standardData');
 
         // Create the content
         final content = await _service.createContent(

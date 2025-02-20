@@ -102,6 +102,34 @@ class _StandardContentFormDialogState extends State<StandardContentFormDialog> {
             return null;
           },
         ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                _mediaFile != null
+                    ? 'Selected: ${_mediaFile!.path.split('/').last}'
+                    : 'No media selected',
+                style: Theme.of(context).textTheme.bodyMedium,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              onPressed: _isLoading ? null : _pickMedia,
+              icon: const Icon(Icons.add_photo_alternate),
+              label: const Text('Add Image'),
+            ),
+          ],
+        ),
+        if (_mediaFile != null) ...[
+          const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: () => setState(() => _mediaFile = null),
+            icon: const Icon(Icons.clear),
+            label: const Text('Remove Image'),
+          ),
+        ],
       ],
     );
   }
@@ -181,7 +209,10 @@ class _StandardContentFormDialogState extends State<StandardContentFormDialog> {
                 }).toList(),
                 onChanged: (value) {
                   if (value != null) {
-                    setState(() => _selectedStandard = value);
+                    setState(() {
+                      _selectedStandard = value;
+                      _mediaFile = null; // Clear media file when switching standards
+                    });
                   }
                 },
               ),
@@ -233,10 +264,20 @@ class _StandardContentFormDialogState extends State<StandardContentFormDialog> {
                     };
 
                     if (_selectedStandard == 'W3-Gamified-NFT') {
+                      if (_mediaFile == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Please select an image file'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
                       result.addAll({
                         'code': _codeController.text,
                         'owner': _ownerController.text,
-                        'nonce': _nonceController.text, // Keep as string, service will parse
+                        'nonce': _nonceController.text,
+                        'mediaFile': _mediaFile!.path,
                       });
                     } else {
                       result.addAll({
