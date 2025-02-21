@@ -1,10 +1,15 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import 'package:convert/convert.dart';
+import 'package:pointycastle/digests/ripemd160.dart';
 import 'content_standard.dart';
 import '../models/content_part.dart';
 
 class W3GamifiedNFTStandard implements ContentStandard {
+  static final _ripemd160 = RIPEMD160Digest();
+
   @override
   String get name => 'W3-Gamified-NFT';
 
@@ -78,23 +83,23 @@ class W3GamifiedNFTStandard implements ContentStandard {
     return validatedData;
   }
 
-  @override
-  Future<String> computeHash(Map<String, dynamic> data, List<ContentPart> parts) async {
-    final buffer = StringBuffer();
-    
-    // Add standard data
-    buffer.write(data['code']);
-    buffer.write(data['owner']);
-    buffer.write(data['nonce'].toString());
-    
-    // Add file hashes in order
-    for (final part in parts) {
-      buffer.write(part.hash);
-    }
+    @override
+  Future<String> computeHash(Map<String, dynamic> standardData, List<ContentPart> parts) async {
+    final code = standardData['code'] as String;
+    final owner = standardData['owner'] as String;
+    final nonce = standardData['nonce'] is String ? int.parse(standardData['nonce'] as String) : standardData['nonce'] as int;
+    final imageChecksum = standardData['imageChecksum'] as String;
 
-    // Compute final hash
-    final contentHash = sha256.convert(utf8.encode(buffer.toString())).toString();
-    print('Computed content hash: $contentHash');
-    return contentHash;
+    // Concatenate in specified order
+    final hashInput = code + owner + imageChecksum + nonce.toString();
+    
+    // First compute SHA-256
+    final sha256Digest = sha256.convert(utf8.encode(hashInput));
+    
+    // Then compute RIPEMD160 of the SHA256 result
+    final ripemd160Bytes = _ripemd160.process(sha256Digest.bytes as Uint8List);
+    
+    // Return as hex
+    return hex.encode(ripemd160Bytes);
   }
 }
