@@ -46,6 +46,7 @@ dependencies:
   share_plus: ^7.2.1  # Added for sharing functionality
   flutter_launcher_icons: ^0.14.3
   permission_handler: ^10.2.0  # Added for storage permissions
+  web_socket_channel: ^2.4.0  # For Electrum WebSocket connection
 
 dev_dependencies:
   flutter_test:

@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
-import '../providers/bitcoin_provider.dart';
-import '../services/bitcoin_service.dart';
-import '../providers/theme_provider.dart'; // Add this line
+import '../providers/electrum_provider.dart';
+import '../providers/theme_provider.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  final String? initialError;
+
+  const SettingsScreen({
+    super.key,
+    this.initialError,
+  });
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -18,6 +22,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController _portController;
   late TextEditingController _usernameController;
   late TextEditingController _passwordController;
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -41,207 +46,232 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _saveSettings() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final settings = NodeSettings(
-      host: _hostController.text,
-      port: int.parse(_portController.text),
-      username: _usernameController.text,
-      password: _passwordController.text,
-    );
+    setState(() => _isLoading = true);
 
-    final settingsProvider = context.read<SettingsProvider>();
-    await settingsProvider.saveNodeSettings(settings);
-
-    // Initialize Bitcoin service with new settings
-    final bitcoinProvider = context.read<BitcoinProvider>();
-    await bitcoinProvider.initializeService(
-      host: settings.host,
-      port: settings.port,
-      username: settings.username,
-      password: settings.password,
-    );
-
-    // Clear any cached profiles when settings change
-    bitcoinProvider.clearProfiles();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Settings saved successfully')),
+    try {
+      final settings = NodeSettings(
+        host: _hostController.text,
+        port: int.parse(_portController.text),
+        username: _usernameController.text,
+        password: _passwordController.text,
       );
+
+      await context.read<SettingsProvider>().saveNodeSettings(settings);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Settings saved successfully')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error saving settings: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final electrumProvider = context.watch<ElectrumProvider>();
+    final error = electrumProvider.error ?? widget.initialError;
+    final isConnected = electrumProvider.isConnected;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Node Settings'),
       ),
-      body: Consumer<SettingsProvider>(
-        builder: (context, provider, child) {
-          if (provider.isLoading) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (provider.error != null) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Error: ${provider.error}',
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (error != null)
+              Card(
+                color: Theme.of(context).colorScheme.errorContainer,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.error_outline,
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Connection Error',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        error,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () => provider.reloadSettings(),
-                    child: const Text('Retry'),
-                  ),
-                ],
+                ),
               ),
-            );
-          }
-
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Form(
+            if (isConnected)
+              Card(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                child: const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Icon(Icons.check_circle_outline),
+                      SizedBox(width: 8),
+                      Text('Connected to Electrum server'),
+                    ],
+                  ),
+                ),
+              ),
+            const SizedBox(height: 16),
+            // Theme Settings
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Theme',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 16),
+                    Consumer<ThemeProvider>(
+                      builder: (context, themeProvider, child) {
+                        return Column(
+                          children: [
+                            RadioListTile<ThemeMode>(
+                              title: const Text('System'),
+                              value: ThemeMode.system,
+                              groupValue: themeProvider.themeMode,
+                              onChanged: (ThemeMode? value) {
+                                if (value != null) {
+                                  themeProvider.setThemeMode(value);
+                                }
+                              },
+                            ),
+                            RadioListTile<ThemeMode>(
+                              title: const Text('Light'),
+                              value: ThemeMode.light,
+                              groupValue: themeProvider.themeMode,
+                              onChanged: (ThemeMode? value) {
+                                if (value != null) {
+                                  themeProvider.setThemeMode(value);
+                                }
+                              },
+                            ),
+                            RadioListTile<ThemeMode>(
+                              title: const Text('Dark'),
+                              value: ThemeMode.dark,
+                              groupValue: themeProvider.themeMode,
+                              onChanged: (ThemeMode? value) {
+                                if (value != null) {
+                                  themeProvider.setThemeMode(value);
+                                }
+                              },
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Form(
               key: _formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Theme Settings
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Theme',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const SizedBox(height: 16),
-                          Consumer<ThemeProvider>(
-                            builder: (context, themeProvider, child) {
-                              return Column(
-                                children: [
-                                  RadioListTile<ThemeMode>(
-                                    title: const Text('System'),
-                                    value: ThemeMode.system,
-                                    groupValue: themeProvider.themeMode,
-                                    onChanged: (ThemeMode? value) {
-                                      if (value != null) {
-                                        themeProvider.setThemeMode(value);
-                                      }
-                                    },
-                                  ),
-                                  RadioListTile<ThemeMode>(
-                                    title: const Text('Light'),
-                                    value: ThemeMode.light,
-                                    groupValue: themeProvider.themeMode,
-                                    onChanged: (ThemeMode? value) {
-                                      if (value != null) {
-                                        themeProvider.setThemeMode(value);
-                                      }
-                                    },
-                                  ),
-                                  RadioListTile<ThemeMode>(
-                                    title: const Text('Dark'),
-                                    value: ThemeMode.dark,
-                                    groupValue: themeProvider.themeMode,
-                                    onChanged: (ThemeMode? value) {
-                                      if (value != null) {
-                                        themeProvider.setThemeMode(value);
-                                      }
-                                    },
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                        ],
-                      ),
+                  TextFormField(
+                    controller: _hostController,
+                    decoration: const InputDecoration(
+                      labelText: 'Node Address',
+                      hintText: 'e.g., localhost or http://localhost',
+                      helperText: 'You can include http:// or https:// in the address',
                     ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter the node address';
+                      }
+                      return null;
+                    },
                   ),
-                  const SizedBox(height: 24),
-                  // Node Settings
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Node Settings',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const SizedBox(height: 16),
-                          TextFormField(
-                            controller: _hostController,
-                            decoration: const InputDecoration(
-                              labelText: 'Node Address',
-                              hintText: 'e.g., localhost or http://localhost',
-                              helperText: 'You can include http:// or https:// in the address',
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter the node address';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          TextFormField(
-                            controller: _portController,
-                            decoration: const InputDecoration(
-                              labelText: 'Port',
-                              hintText: 'e.g., 19332',
-                            ),
-                            keyboardType: TextInputType.number,
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter the port number';
-                              }
-                              if (int.tryParse(value) == null) {
-                                return 'Please enter a valid port number';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          TextFormField(
-                            controller: _usernameController,
-                            decoration: const InputDecoration(
-                              labelText: 'Username',
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter a username';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          TextFormField(
-                            controller: _passwordController,
-                            decoration: const InputDecoration(
-                              labelText: 'Password',
-                            ),
-                            obscureText: true,
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter a password';
-                              }
-                              return null;
-                            },
-                          ),
-                        ],
-                      ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _portController,
+                    decoration: const InputDecoration(
+                      labelText: 'Port',
+                      hintText: 'e.g., 19332',
                     ),
+                    keyboardType: TextInputType.number,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter the port number';
+                      }
+                      final port = int.tryParse(value);
+                      if (port == null || port <= 0 || port > 65535) {
+                        return 'Please enter a valid port number (1-65535)';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _usernameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Username',
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter a username';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _passwordController,
+                    decoration: const InputDecoration(
+                      labelText: 'Password',
+                    ),
+                    obscureText: true,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter a password';
+                      }
+                      return null;
+                    },
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton(
-                    onPressed: _saveSettings,
-                    child: const Text('Save Settings'),
+                    onPressed: _isLoading ? null : _saveSettings,
+                    child: _isLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Save Settings'),
                   ),
                   const SizedBox(height: 16),
                   OutlinedButton(
@@ -257,8 +287,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-          );
-        },
+          ],
+        ),
       ),
     );
   }

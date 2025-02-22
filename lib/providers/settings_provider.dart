@@ -17,8 +17,8 @@ class NodeSettings {
 
   factory NodeSettings.defaults() {
     return NodeSettings(
-      host: 'localhost',
-      port: 19332,
+      host: '1.tcp.ap.ngrok.io',
+      port: 21920,
       username: '',
       password: '',
     );

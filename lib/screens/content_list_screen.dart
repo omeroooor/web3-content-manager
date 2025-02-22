@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/content_provider.dart';
-import '../providers/bitcoin_provider.dart';
+import '../providers/electrum_provider.dart';
 import '../models/content_part.dart';
 import 'content_details_screen.dart';
 
@@ -69,88 +69,123 @@ class _ContentListScreenState extends State<ContentListScreen> {
 
   void _showProfileDialog(BuildContext context, String contentHash) {
     print('\nShowing profile dialog for hash: $contentHash');
-    final bitcoinProvider = context.read<BitcoinProvider>();
+    final electrumProvider = context.read<ElectrumProvider>();
     final contentProvider = context.read<ContentProvider>();
     
     // Immediately fetch the profile data
-    bitcoinProvider.fetchProfile(contentHash);
+    electrumProvider.fetchProfile(contentHash);
 
     showDialog(
       context: context,
       builder: (context) => Dialog(
         child: Container(
           padding: const EdgeInsets.all(16),
-          child: Consumer<BitcoinProvider>(
+          child: Consumer<ElectrumProvider>(
             builder: (context, provider, child) {
               print('Rebuilding profile dialog, loading: ${provider.isLoading}, error: ${provider.error}');
+              
+              if (provider.isLoading) {
+                return const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Fetching profile data...'),
+                  ],
+                );
+              }
+
+              if (provider.error != null) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                    const SizedBox(height: 16),
+                    Text('Error: ${provider.error}'),
+                    const SizedBox(height: 16),
+                    TextButton(
+                      onPressed: () {
+                        provider.fetchProfile(contentHash);
+                      },
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                );
+              }
+
               final profile = provider.getProfile(contentHash);
               print('Current profile data: $profile');
 
-              // Schedule profile update for after the build
-              if (profile != null) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  try {
-                    final content = contentProvider.contents.firstWhere(
-                      (content) => content.contentHash == contentHash,
-                      orElse: () => throw Exception('Content not found'),
-                    );
-                    contentProvider.updateContentProfile(
-                      content.id,
-                      profile['owner'] as String,
-                      profile['rps'] as int,
-                    );
-                  } catch (e) {
-                    print('Error updating content profile: $e');
-                  }
-                });
+              if (profile == null) {
+                return const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 48),
+                    SizedBox(height: 16),
+                    Text('No profile data found'),
+                  ],
+                );
               }
+
+              // Schedule profile update for after the build
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                try {
+                  final content = contentProvider.contents.firstWhere(
+                    (content) => content.contentHash == contentHash,
+                    orElse: () => throw Exception('Content not found'),
+                  );
+                  contentProvider.updateContentProfile(
+                    content.id,
+                    profile['owner'] as String,
+                    profile['rps'] as int,
+                  );
+                } catch (e) {
+                  print('Error updating content profile: $e');
+                }
+              });
 
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Content Profile',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ],
+                  const Text(
+                    'Profile Information',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 16),
-                  if (provider.isLoading)
-                    const Center(child: CircularProgressIndicator())
-                  else if (provider.error != null)
-                    Text(
-                      'Error: ${provider.error}',
-                      style: const TextStyle(color: Colors.red),
-                    )
-                  else if (profile != null) ...[
-                    Text('RPS: ${profile['rps']}'),
-                    const SizedBox(height: 8),
-                    Text('Owner: ${profile['owner']}'),
-                    const SizedBox(height: 8),
-                    Text(
-                      profile['isRented']
-                          ? 'Currently rented by: ${profile['tenant']}'
-                          : 'Not currently rented',
-                    ),
-                  ] else
-                    const Text('No profile data available'),
+                  Text('Owner: ${profile['owner']}'),
+                  const SizedBox(height: 8),
+                  Text('RPS: ${profile['rps']}'),
+                  const SizedBox(height: 8),
+                  Text('Tenant: ${profile['tenent']}'),
+                  const SizedBox(height: 8),
+                  if (profile['rentedAt'] != null && profile['rentedAt'] > 0)
+                    Text('Rented At: ${DateTime.fromMillisecondsSinceEpoch(profile['rentedAt'] * 1000)}'),
+                  const SizedBox(height: 8),
+                  if (profile['duration'] != null && profile['duration'] > 0)
+                    Text('Duration: ${profile['duration']} seconds'),
+                  const SizedBox(height: 8),
+                  Text('Owned Profiles: ${profile['ownedProfiles']}'),
                   const SizedBox(height: 16),
-                  Center(
-                    child: ElevatedButton(
-                      onPressed: () => provider.fetchProfile(contentHash),
-                      child: const Text('Refresh Profile'),
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () {
+                          provider.fetchProfile(contentHash);
+                        },
+                        child: const Text('Refresh'),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                        },
+                        child: const Text('Close'),
+                      ),
+                    ],
                   ),
                 ],
               );

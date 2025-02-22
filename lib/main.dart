@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'providers/content_provider.dart';
-import 'providers/bitcoin_provider.dart';
+import 'providers/electrum_provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/theme_provider.dart';
 import 'services/content_service.dart';
-import 'services/bitcoin_service.dart';
+import 'services/electrum_service.dart';
 import 'screens/content_list_screen.dart';
 import 'screens/settings_screen.dart';
 import 'widgets/app_logo.dart';
@@ -17,23 +17,15 @@ void main() async {
   final prefs = await SharedPreferences.getInstance();
   final settingsProvider = SettingsProvider(prefs);
   final themeProvider = ThemeProvider(prefs);
-  final bitcoinProvider = BitcoinProvider();
+  final electrumProvider = ElectrumProvider();
   
-  // Initialize Bitcoin service if settings exist
-  final nodeSettings = settingsProvider.nodeSettings;
-  if (nodeSettings != null) {
-    await bitcoinProvider.initializeService(
-      host: nodeSettings.host,
-      port: nodeSettings.port,
-      username: nodeSettings.username,
-      password: nodeSettings.password,
-    );
-  }
+  // Initialize providers
+  electrumProvider.initialize(settingsProvider);
   
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => bitcoinProvider),
+        ChangeNotifierProvider(create: (_) => electrumProvider),
         ChangeNotifierProvider(create: (_) => settingsProvider),
         ChangeNotifierProvider(create: (_) => themeProvider),
         ChangeNotifierProvider(create: (_) => ContentProvider()),
@@ -61,7 +53,6 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
