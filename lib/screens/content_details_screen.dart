@@ -427,11 +427,11 @@ Note: The content file is attached to this share.
                     if (content.standardData.containsKey('mediaPath')) ...[
                       const SizedBox(height: 16),
                       Text(
-                        'Media',
+                        'Media Path',
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       const SizedBox(height: 8),
-                      Text(content.standardData['mediaPath'] as String),
+                      Text(content.standardData['mediaPath']?.toString() ?? 'No media path available'),
                     ],
                   ],
                 ),
