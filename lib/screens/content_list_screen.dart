@@ -189,7 +189,35 @@ class _ContentListScreenState extends State<ContentListScreen> {
                         content.name,
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      subtitle: Text(content.description),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            content.description,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (content.description.split('\n').length > 2 ||
+                              content.description.length > 100)
+                            GestureDetector(
+                              onTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        ContentDetailsScreen(content: content),
+                                  ),
+                                );
+                              },
+                              child: const Text(
+                                'Read more...',
+                                style: TextStyle(
+                                  color: Colors.blue,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                       onTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(

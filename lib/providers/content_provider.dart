@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import '../models/content_part.dart';
 import '../services/content_service.dart';
 import '../widgets/standard_content_form_dialog.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class ContentProvider with ChangeNotifier {
   final _service = ContentService();
@@ -214,48 +215,74 @@ class ContentProvider with ChangeNotifier {
     }
   }
 
-  Future<File?> exportContent({bool returnFile = false, File? targetFile}) async {
-    if (_currentContent == null) {
-      return null;
-    }
-
+  Future<File> exportContent(String? contentId, {File? targetFile}) async {
     try {
-      final content = _currentContent!;
-      
-      // If no target file is provided, create one
-      File file;
-      if (targetFile != null) {
-        file = targetFile;
-      } else {
-        final fileName = '${content.name.replaceAll(' ', '_')}_${content.id.substring(0, 8)}.pcontent';
-        if (returnFile) {
-          // Create in temp directory if returning the file
-          final tempDir = await getTemporaryDirectory();
-          final filePath = p.join(tempDir.path, fileName);
-          file = File(filePath);
-        } else {
-          // Create in downloads directory if not returning
-          final downloadsDir = await getExternalStorageDirectory();
-          if (downloadsDir == null) {
-            throw Exception('Could not access Downloads directory');
-          }
-          final targetPath = p.join(downloadsDir.path, fileName);
-          file = File(targetPath);
-        }
+      final content = contentId != null 
+          ? contents.firstWhere((c) => c.id == contentId)
+          : _currentContent!;
+          
+      if (content == null) {
+        throw Exception('No content selected for export');
       }
 
-      // Create the export file
+      final file = targetFile ?? await _createExportFile(content);
       await _service.exportContent(content, file);
-
-      if (returnFile) {
-        return file;
-      }
-
-      notifyListeners();
-      return null;
+      return file;
     } catch (e) {
-      print('Error exporting content: $e');
       rethrow;
+    }
+  }
+
+  Future<File> _createExportFile(PortableContent content) async {
+    final exportDir = await _getExportDirectory();
+    if (!await exportDir.exists()) {
+      await exportDir.create(recursive: true);
+    }
+    final fileName = '${content.name.replaceAll(' ', '_')}.pcontent';
+    return File(p.join(exportDir.path, fileName));
+  }
+
+  Future<Directory> _getExportDirectory() async {
+    try {
+      if (Platform.isAndroid) {
+        // Request storage permissions on Android
+        final status = await Permission.storage.request();
+        if (!status.isGranted) {
+          throw Exception('Storage permission is required to export content');
+        }
+        
+        // Get the Downloads directory using getExternalStorageDirectory
+        final baseDir = await getExternalStorageDirectory();
+        if (baseDir == null) {
+          throw Exception('Could not access external storage');
+        }
+        
+        // Navigate up to find the root external storage
+        String? downloadsPath;
+        List<String> paths = baseDir.path.split('/');
+        int index = paths.indexOf('Android');
+        if (index > 0) {
+          downloadsPath = paths.sublist(0, index).join('/') + '/Download';
+        } else {
+          // Fallback if we can't find the Android directory
+          downloadsPath = baseDir.path + '/Download';
+        }
+        
+        final downloadsDir = Directory(downloadsPath);
+        if (!await downloadsDir.exists()) {
+          await downloadsDir.create(recursive: true);
+        }
+        return downloadsDir;
+      } else {
+        // Use the platform-specific documents directory for other platforms
+        final directory = await getApplicationDocumentsDirectory();
+        final downloadsDir = Directory('${directory.path}/Downloads');
+        return downloadsDir;
+      }
+    } catch (e) {
+      // Fallback to app documents directory if we can't get the downloads directory
+      final directory = await getApplicationDocumentsDirectory();
+      return directory;
     }
   }
 

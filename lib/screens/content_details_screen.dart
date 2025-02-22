@@ -45,120 +45,28 @@ Note: The content file is attached to this share.
 
   Future<void> _shareContent(BuildContext context) async {
     try {
-      print('\nStarting content share...');
-      print('Platform: ${Platform.operatingSystem}');
-      
-      print('Content details:');
-      print('- Name: ${content.name}');
-      print('- ID: ${content.id}');
-      print('- Description: ${content.description}');
-      print('- Standard: ${content.standardName} v${content.standardVersion}');
-      print('- Created: ${content.createdAt}');
-
-      // Show loading indicator
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Preparing content for sharing...')),
-        );
-      }
-
-      // Get the share directory
+      final provider = context.read<ContentProvider>();
       final tempDir = await getTemporaryDirectory();
-      final shareDir = Directory('${tempDir.path}/share_content');
-      if (!await shareDir.exists()) {
-        await shareDir.create(recursive: true);
-      }
-      print('\nShare directory: ${shareDir.path}');
-
-      // Create export file
-      final fileName = '${content.name}_${content.id.substring(0, 8)}.pcontent';
-      final exportFile = File('${shareDir.path}/$fileName');
-      print('Creating export file at: ${exportFile.path}');
-
-      // Export content
-      final provider = Provider.of<ContentProvider>(context, listen: false);
-      await provider.exportContent(returnFile: true, targetFile: exportFile);
+      final exportFile = File('${tempDir.path}/share_content.pcontent');
       
-      // Verify the export file
-      print('\nVerifying export file before share:');
-      print('File exists: ${await exportFile.exists()}');
-      final fileSize = await exportFile.length();
-      print('File size: $fileSize bytes');
+      // Export the content to a temporary file
+      await provider.exportContent(null, targetFile: exportFile);
       
-      // Verify archive contents
-      print('Verifying archive contents:');
-      final bytes = await exportFile.readAsBytes();
-      final archive = ZipDecoder().decodeBytes(bytes);
-      if (archive == null) {
-        throw Exception('Failed to decode exported archive');
-      }
-      
-      print('Archive files:');
-      for (final file in archive.files) {
-        print('- ${file.name} (${file.size} bytes)');
-        if (file.content == null) {
-          throw Exception('File ${file.name} has null content');
-        }
-        print('  Content size: ${(file.content as List<int>).length} bytes');
-      }
-      print('Archive verification successful');
-
       // Create share text
       final shareText = await _createShareText(content);
-      print('Share text created successfully');
-      print('Share text length: ${shareText.length}');
-
-      print('Attempting to share...');
+      
+      // Share the file
       await Share.shareXFiles(
         [XFile(exportFile.path)],
         text: shareText,
       );
 
-      // Verify file after sharing
-      print('\nVerifying file after share:');
-      if (!await exportFile.exists()) {
-        print('ERROR: File no longer exists after share!');
-        throw Exception('File was deleted during share');
-      }
-      
-      final postShareSize = await exportFile.length();
-      print('Post-share file size: $postShareSize bytes');
-      if (postShareSize != fileSize) {
-        print('ERROR: File size changed during share!');
-        print('Original size: $fileSize bytes');
-        print('New size: $postShareSize bytes');
-        throw Exception('File was modified during share');
-      }
-      
-      // Verify archive contents again
-      print('Verifying post-share archive contents:');
-      final postShareBytes = await exportFile.readAsBytes();
-      final postShareArchive = ZipDecoder().decodeBytes(postShareBytes);
-      if (postShareArchive == null) {
-        throw Exception('Failed to decode post-share archive');
-      }
-      
-      print('Post-share archive files:');
-      for (final file in postShareArchive.files) {
-        print('- ${file.name} (${file.size} bytes)');
-        if (file.content == null) {
-          throw Exception('File ${file.name} has null content after share');
-        }
-        print('  Content size: ${(file.content as List<int>).length} bytes');
-      }
-      print('Post-share archive verification successful');
-
-      // Hide loading indicator
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      // Clean up the temporary file
+      if (await exportFile.exists()) {
+        await exportFile.delete();
       }
     } catch (e) {
-      print('ERROR in _shareContent: $e');
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error sharing content: $e')),
-        );
-      }
+      _showMessage(context, 'Failed to share content: $e', isError: true);
     }
   }
 
@@ -259,27 +167,29 @@ Note: The content file is attached to this share.
                       contentProvider.selectContent(content.id);
                       
                       // Show loading indicator
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Row(
-                            children: [
-                              SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Row(
+                              children: [
+                                SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
                                 ),
-                              ),
-                              SizedBox(width: 16),
-                              Text('Verifying content...'),
-                            ],
+                                SizedBox(width: 16),
+                                Text('Verifying content...'),
+                              ],
+                            ),
+                            duration: Duration(seconds: 30), // Long duration as default
+                            behavior: SnackBarBehavior.floating,
+                            margin: EdgeInsets.all(8),
                           ),
-                          duration: Duration(seconds: 30), // Long duration as default
-                          behavior: SnackBarBehavior.floating,
-                          margin: EdgeInsets.all(8),
-                        ),
-                      );
+                        );
+                      }
 
                       try {
                         final isValid = await contentProvider.verifyContent();
@@ -315,57 +225,19 @@ Note: The content file is attached to this share.
                     },
                   ),
                   ListTile(
-                    leading: const Icon(Icons.file_download),
+                    leading: const Icon(Icons.save),
                     title: const Text('Export Content'),
                     onTap: () async {
-                      final contentProvider = context.read<ContentProvider>();
-                      contentProvider.selectContent(content.id);
-                      
-                      // Show loading indicator
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Row(
-                            children: [
-                              SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              SizedBox(width: 16),
-                              Text('Preparing content for export...'),
-                            ],
-                          ),
-                          duration: Duration(seconds: 30), // Long duration as default
-                          behavior: SnackBarBehavior.floating,
-                          margin: EdgeInsets.all(8),
-                        ),
-                      );
-
                       try {
-                        await contentProvider.exportContent();
-                        // Hide the loading indicator
-                        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                        
-                        if (context.mounted && contentProvider.error == null) {
-                          _showMessage(
-                            context,
-                            'Content exported successfully to Downloads folder!',
-                          );
-                        }
+                        final contentProvider = context.read<ContentProvider>();
+                        await contentProvider.exportContent(content.id);
+                        _showMessage(context, 'Content exported successfully');
                       } catch (e) {
-                        // Hide the loading indicator
-                        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                        
-                        if (context.mounted) {
-                          _showMessage(
-                            context,
-                            'Export error: ${e.toString().replaceAll('Exception: ', '')}',
-                            isError: true,
-                          );
-                        }
+                        _showMessage(
+                          context,
+                          'Failed to export content: $e',
+                          isError: true,
+                        );
                       }
                     },
                   ),
