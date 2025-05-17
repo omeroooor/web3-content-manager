@@ -239,12 +239,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   TextFormField(
                     controller: _usernameController,
                     decoration: const InputDecoration(
-                      labelText: 'Username',
+                      labelText: 'Username (Optional)',
+                      hintText: 'Leave empty if not required',
                     ),
                     validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter a username';
-                      }
+                      // Username is optional
                       return null;
                     },
                   ),
@@ -252,13 +251,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   TextFormField(
                     controller: _passwordController,
                     decoration: const InputDecoration(
-                      labelText: 'Password',
+                      labelText: 'Password (Optional)',
+                      hintText: 'Leave empty if not required',
                     ),
                     obscureText: true,
                     validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter a password';
-                      }
+                      // Password is optional
                       return null;
                     },
                   ),

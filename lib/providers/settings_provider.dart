@@ -11,8 +11,8 @@ class NodeSettings {
   NodeSettings({
     required this.host,
     required this.port,
-    required this.username,
-    required this.password,
+    this.username = '',
+    this.password = '',
   });
 
   factory NodeSettings.defaults() {
