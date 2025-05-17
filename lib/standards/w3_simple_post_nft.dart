@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as path;
+import 'package:uuid/uuid.dart';
 import 'content_standard.dart';
 import '../models/content_part.dart';
 
@@ -67,9 +68,9 @@ class W3SimplePostNFTStandard implements ContentStandard {
       final checksum = sha256.convert(bytes).toString();
       print('Computed media checksum: $checksum');
 
-      // Use the original filename from the file path
-      final fileName = path.basename(mediaFile.path);
-      validatedData['mediaPath'] = fileName;
+      // Use existing mediaPath if available, otherwise generate UUID
+      final mediaPath = data['mediaPath'] ?? '${const Uuid().v4()}$extension';
+      validatedData['mediaPath'] = mediaPath;
       validatedData['mediaType'] = _getMediaType(extension);
       validatedData['mediaChecksum'] = checksum;
     }
@@ -90,8 +91,6 @@ class W3SimplePostNFTStandard implements ContentStandard {
 
     // Add media info if present
     if (data.containsKey('mediaPath')) {
-      buffer.write(data['mediaPath']);
-      buffer.write(data['mediaType'] ?? '');
       buffer.write(data['mediaChecksum'] ?? '');
     }
 

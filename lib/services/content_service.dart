@@ -268,13 +268,14 @@ class ContentService {
     
     final List<ContentPart> parts = [];
     
+    // Create content parts
     for (final file in files) {
       final bytes = await file.readAsBytes();
       final hash = await computeHash(bytes);
       
       parts.add(ContentPart(
         id: _uuid.v4(),
-        name: p.basename(file.path), // Use path.basename for consistent filename extraction
+        name: '${_uuid.v4()}${p.extension(file.path)}', // Use path.basename for consistent filename extraction
         hash: hash,
         mimeType: 'application/octet-stream', // TODO: Implement proper MIME type detection
         size: bytes.length,
@@ -290,7 +291,7 @@ class ContentService {
     // Create a copy of standardData with correct file paths
     final validatedData = Map<String, dynamic>.from(standardData);
     if (standardName == 'W3-S-POST-NFT' && files.isNotEmpty) {
-      validatedData['mediaPath'] = p.basename(files.first.path);
+      validatedData['mediaPath'] = parts[0].name;
     }
 
     print('Pre-validation standardData: $validatedData');

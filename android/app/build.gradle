@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace "com.example.pcontent"
+    namespace "net.kbunet.w3cm"
     compileSdkVersion 34
     ndkVersion "27.0.12077973"
     buildToolsVersion = "34.0.0"
@@ -27,7 +27,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.example.pcontent"
+        applicationId "net.kbunet.w3cm"
         minSdkVersion 21
         targetSdkVersion 34
         versionCode flutter.versionCode.toInteger()
